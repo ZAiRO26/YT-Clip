@@ -7,7 +7,7 @@ import logging
 import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import BinaryIO, Optional
+from typing import Optional
 
 from clipforge_core.config import settings
 
