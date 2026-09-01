@@ -1,0 +1,122 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-3xl: 28px;
+  --radius-4xl: 32px;
+
+  /* ClipForge brand tokens from UI/UX Brief */
+  --color-cf-primary: #6366F1;
+  --color-cf-secondary: #1E1E24;
+  --color-cf-accent: #F97316;
+  --color-cf-success: #22C55E;
+  --color-cf-warn: #F59E0B;
+  --color-cf-error: #EF4444;
+  --color-cf-bg: #0B0B0F;
+  --color-cf-text: #F5F5F7;
+  --color-cf-muted: #9CA3AF;
+}
+
+/*
+ * ClipForge AI — Dark-mode native design system
+ * Brand: professional, efficient, dark-mode-native
+ * Inspiration: OpusClip, Whop dashboard, Linear
+ *
+ * Colour tokens from UI/UX Brief section 04:
+ *   primary: #6366F1 (indigo)
+ *   secondary: #1E1E24
+ *   accent: #F97316 (orange)
+ *   bg: #0B0B0F
+ *   text: #F5F5F7
+ *   muted: #9CA3AF
+ */
+
+:root {
+  /* ClipForge is dark-mode-native — dark values are the defaults */
+  --background: #0B0B0F;
+  --foreground: #F5F5F7;
+  --card: #1E1E24;
+  --card-foreground: #F5F5F7;
+  --popover: #1E1E24;
+  --popover-foreground: #F5F5F7;
+  --primary: #6366F1;
+  --primary-foreground: #FFFFFF;
+  --secondary: #1E1E24;
+  --secondary-foreground: #F5F5F7;
+  --muted: #1E1E24;
+  --muted-foreground: #9CA3AF;
+  --accent: #F97316;
+  --accent-foreground: #FFFFFF;
+  --destructive: #EF4444;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: #6366F1;
+  --chart-1: #6366F1;
+  --chart-2: #F97316;
+  --chart-3: #22C55E;
+  --chart-4: #F59E0B;
+  --chart-5: #EF4444;
+  --radius: 10px;
+  --sidebar: #0F0F14;
+  --sidebar-foreground: #F5F5F7;
+  --sidebar-primary: #6366F1;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #1E1E24;
+  --sidebar-accent-foreground: #F5F5F7;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #6366F1;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
