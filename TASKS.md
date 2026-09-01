@@ -9,7 +9,7 @@
 ## Phase 1 — Foundation and Local Development
 - [x] Initialize monorepo: `apps/web`, `apps/api`, `apps/worker`, `packages/contracts`, `packages/python-core`, `infra`.
 - [x] Configure pnpm workspace and uv Python workspace.
-- [ ] Add Docker Compose: Postgres 16, Redis 7, MinIO, API, worker.
+- [x] Add Docker Compose: Postgres 16, Redis 7, MinIO, API, worker.
 - [ ] Configure Next.js + Tailwind + shadcn/ui (stable) + v2 design tokens.
 - [ ] Configure FastAPI, structured logging, `/health`, `/ready`.
 - [ ] Configure Alembic migrations.
