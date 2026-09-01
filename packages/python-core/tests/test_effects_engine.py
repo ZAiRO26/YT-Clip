@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from clipforge_core.services.effects_engine import (
     EFFECT_CATALOG,
     apply_motion_effects,
