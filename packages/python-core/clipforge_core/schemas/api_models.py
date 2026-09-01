@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 
+
 class LLMSettingsSchema(BaseModel):
     llm_base_url: str = Field(default="http://localhost:8080/v1")
     llm_api_key: str = Field(default="not-needed")

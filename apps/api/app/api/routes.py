@@ -12,17 +12,13 @@ All endpoints from Backend Schema section 05:
 Note: Auth is simplified for v1 (single-user). Full Supabase Auth
 integration will be added in Phase 4 with the frontend.
 """
+
 import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
-from clipforge_core.database import get_async_session
 from clipforge_core.config import settings
+from clipforge_core.database import get_async_session
 from clipforge_core.models import CampaignBrief, Clip, Job, Project, User
 from clipforge_core.schemas import (
     CampaignBriefCreate,
@@ -38,6 +34,10 @@ from clipforge_core.schemas import (
     ThumbnailRequest,
 )
 from clipforge_core.services.pipeline import create_pipeline_jobs, dispatch_pipeline, dispatch_reclip
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,7 @@ async def _ensure_temp_user(session: AsyncSession) -> str:
 # ============================================
 # Campaign Briefs
 # ============================================
+
 
 @router.post("/campaign-briefs", response_model=CampaignBriefResponse)
 async def create_campaign_brief(
@@ -105,6 +106,7 @@ async def list_campaign_briefs(
 # ============================================
 # Projects
 # ============================================
+
 
 @router.post("/projects", response_model=ProjectResponse)
 async def create_project(
@@ -177,6 +179,7 @@ async def create_project(
         # Don't fail the request — the project is created, pipeline can be retried
     return project
 
+
 @router.delete("/projects/{project_id}", response_model=MessageResponse)
 async def delete_project(
     project_id: uuid.UUID,
@@ -188,7 +191,7 @@ async def delete_project(
 
     result = await session.execute(select(Project).where(Project.id == project_id))
     project = result.scalar_one_or_none()
-    
+
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -205,6 +208,7 @@ async def delete_project(
             logger.error(f"Failed to delete media directory {media_dir}: {e}")
 
     return MessageResponse(message="Project deleted successfully")
+
 
 @router.post("/projects/{project_id}/retry", response_model=MessageResponse)
 async def retry_project(
@@ -226,13 +230,16 @@ async def retry_project(
 
     # Reset project status
     project.status = "queued"
-    
+
     # Reset job statuses synchronously via helper or direct DB queries
     from clipforge_core.database import get_sync_session
     from clipforge_core.models import Job
+
     sync_session = get_sync_session()
     try:
-        sync_session.query(Job).filter(Job.project_id == project_id).update({"status": "pending", "error_message": None})
+        sync_session.query(Job).filter(Job.project_id == project_id).update(
+            {"status": "pending", "error_message": None}
+        )
         sync_session.commit()
     except Exception as e:
         sync_session.rollback()
@@ -252,7 +259,6 @@ async def retry_project(
     return MessageResponse(message="Pipeline restarted successfully")
 
 
-
 @router.get("/projects", response_model=list[ProjectListItem])
 async def list_projects(
     session: AsyncSession = Depends(get_async_session),
@@ -266,7 +272,7 @@ async def list_projects(
         .where(Project.owner_id == uuid.UUID(owner_id))
         .order_by(Project.created_at.desc())
     )
-    
+
     projects = result.scalars().all()
     items = []
     for p in projects:
@@ -276,17 +282,19 @@ async def list_projects(
             if c.thumbnail_url:
                 preview_url = c.thumbnail_url
                 break
-                
-        items.append(ProjectListItem(
-            id=p.id,
-            source_type=p.source_type,
-            source_value=p.source_value,
-            clip_count=p.clip_count,
-            status=p.status,
-            created_at=p.created_at,
-            preview_url=preview_url
-        ))
-        
+
+        items.append(
+            ProjectListItem(
+                id=p.id,
+                source_type=p.source_type,
+                source_value=p.source_value,
+                clip_count=p.clip_count,
+                status=p.status,
+                created_at=p.created_at,
+                preview_url=preview_url,
+            )
+        )
+
     return items
 
 
@@ -296,11 +304,7 @@ async def get_project(
     session: AsyncSession = Depends(get_async_session),
 ):
     """Get project details with per-stage job progress."""
-    result = await session.execute(
-        select(Project)
-        .options(selectinload(Project.jobs))
-        .where(Project.id == project_id)
-    )
+    result = await session.execute(select(Project).options(selectinload(Project.jobs)).where(Project.id == project_id))
     project = result.scalar_one_or_none()
 
     if not project:
@@ -316,16 +320,12 @@ async def list_project_clips(
 ):
     """List all generated clips for a project."""
     # Verify project exists
-    proj_result = await session.execute(
-        select(Project).where(Project.id == project_id)
-    )
+    proj_result = await session.execute(select(Project).where(Project.id == project_id))
     if not proj_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Project not found")
 
     result = await session.execute(
-        select(Clip)
-        .where(Clip.project_id == project_id)
-        .order_by(Clip.score.desc().nulls_last())
+        select(Clip).where(Clip.project_id == project_id).order_by(Clip.score.desc().nulls_last())
     )
     return result.scalars().all()
 
@@ -334,6 +334,7 @@ async def list_project_clips(
 # Clips
 # ============================================
 
+
 @router.patch("/clips/{clip_id}", response_model=ClipResponse)
 async def update_clip(
     clip_id: uuid.UUID,
@@ -341,9 +342,7 @@ async def update_clip(
     session: AsyncSession = Depends(get_async_session),
 ):
     """Approve or reject a clip."""
-    result = await session.execute(
-        select(Clip).where(Clip.id == clip_id)
-    )
+    result = await session.execute(select(Clip).where(Clip.id == clip_id))
     clip = result.scalar_one_or_none()
 
     if not clip:
@@ -355,10 +354,13 @@ async def update_clip(
 
     if data.review_status == "approved" and clip.file_url:
         try:
-            from sqlalchemy import text
             from clipforge_core.config import settings
+            from sqlalchemy import text
+
             # Check if settings table exists
-            table_check = await session.execute(text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'settings')"))
+            table_check = await session.execute(
+                text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'settings')")
+            )
             if table_check.scalar():
                 res = await session.execute(text("SELECT value FROM settings WHERE key = 'export_path'"))
                 export_path = res.scalar()
@@ -366,6 +368,7 @@ async def update_clip(
                     export_path = export_path.strip('"')
                     import shutil
                     from pathlib import Path
+
                     media_base = Path(settings.MEDIA_DIR).parent
                     source_path = media_base / clip.file_url
                     if source_path.exists():
@@ -389,37 +392,32 @@ async def regenerate_thumbnail(
     """Regenerate a thumbnail for a clip, optionally with text overlay."""
     result = await session.execute(select(Clip).where(Clip.id == clip_id))
     clip = result.scalar_one_or_none()
-    
+
     if not clip:
         raise HTTPException(status_code=404, detail="Clip not found")
-        
+
     if not clip.file_url:
         raise HTTPException(status_code=400, detail="Clip video file not generated yet")
-        
+
+
     from clipforge_core.workers.thumbnail import generate_thumbnail
-    from clipforge_core.config import settings
-    from pathlib import Path
-    
-    media_base = Path(settings.MEDIA_DIR)
-    # The file_url is stored as relative to media_base? Let's assume it's an absolute path string or relative
-    # Actually, file_url is often an absolute string like d:\... or relative like media\...
-    # Just pass the final_path (which is what was set in pipeline: str(clips_dir / f"clip_xxx.mp4"))
+
     video_path = clip.file_url
-    
+
     # We will save it in the same directory
     output_path = video_path.rsplit(".", 1)[0] + "_custom_thumb.jpg"
-    
+
     # For now, just generate a normal thumbnail. Later we can add Pillow text overlay if `data.text` is provided.
     duration = clip.end_sec - clip.start_sec if clip.end_sec and clip.start_sec else 10
-    
+
     success = generate_thumbnail(video_path, output_path, duration)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to generate thumbnail")
-        
+
     clip.thumbnail_url = output_path
     await session.commit()
     await session.refresh(clip)
-    
+
     return clip
 
 
@@ -434,9 +432,7 @@ async def export_project_clips(
     from pathlib import Path
 
     # Verify project exists
-    proj_result = await session.execute(
-        select(Project).where(Project.id == project_id)
-    )
+    proj_result = await session.execute(select(Project).where(Project.id == project_id))
     if not proj_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -445,7 +441,7 @@ async def export_project_clips(
         select(Clip)
         .where(Clip.project_id == project_id)
         .where(Clip.review_status == "approved")
-        .where(Clip.file_url != None)
+        .where(Clip.file_url.is_not(None))
     )
     approved_clips = result.scalars().all()
 
@@ -473,24 +469,24 @@ async def export_project_clips(
             rel_url = clip.file_url.replace("\\", "/")
             # Strip leading "media/" prefix if present
             if rel_url.startswith("media/"):
-                rel_url = rel_url[len("media/"):]
-            
+                rel_url = rel_url[len("media/") :]
+
             source_path = media_base / rel_url
-            
+
             if source_path.exists():
                 dest_path = export_dir / f"project_{project_id}_clip_{exported_count + 1}.mp4"
                 shutil.copy2(source_path, dest_path)
-                
+
                 # Also copy thumbnail if it exists
                 if clip.thumbnail_url:
                     thumb_rel = clip.thumbnail_url.replace("\\", "/")
                     if thumb_rel.startswith("media/"):
-                        thumb_rel = thumb_rel[len("media/"):]
+                        thumb_rel = thumb_rel[len("media/") :]
                     thumb_source = media_base / thumb_rel
                     if thumb_source.exists():
                         thumb_dest = export_dir / f"project_{project_id}_clip_{exported_count + 1}_thumb.jpg"
                         shutil.copy2(thumb_source, thumb_dest)
-                
+
                 exported_count += 1
             else:
                 errors.append(f"Source file not found: {source_path}")
@@ -503,13 +499,14 @@ async def export_project_clips(
     msg = f"Successfully exported {exported_count} clips to {export_dir}"
     if errors:
         msg += f" (with {len(errors)} errors)"
-        
+
     return MessageResponse(message=msg, detail="|".join(errors) if errors else None)
 
 
 # ============================================
 # Reclip — Generate more clips from existing project
 # ============================================
+
 
 @router.post("/projects/{project_id}/reclip")
 async def reclip_project(
@@ -522,11 +519,10 @@ async def reclip_project(
     Skips download and transcription entirely. New clips are appended.
     """
     from pathlib import Path
+
     from clipforge_core.config import settings as app_settings
 
-    result = await session.execute(
-        select(Project).where(Project.id == uuid.UUID(project_id))
-    )
+    result = await session.execute(select(Project).where(Project.id == uuid.UUID(project_id)))
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -535,8 +531,7 @@ async def reclip_project(
     transcript_path = Path(app_settings.MEDIA_DIR) / project_id / "transcript.json"
     if not transcript_path.exists():
         raise HTTPException(
-            status_code=400,
-            detail="No transcript found for this project. The video must be fully processed first."
+            status_code=400, detail="No transcript found for this project. The video must be fully processed first."
         )
 
     # Create new job records for select/crop/caption stages

@@ -1,7 +1,9 @@
 """Verify that all ClipForge tables exist in the database."""
+
+import os
+
 import psycopg2
 from dotenv import load_dotenv
-import os
 
 load_dotenv()
 

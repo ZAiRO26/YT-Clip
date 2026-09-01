@@ -2,8 +2,9 @@
   "name": "clipforge-monorepo",
   "private": true,
   "scripts": {
-    "dev:web": "pnpm --filter @clipforge/web dev",
-    "build:web": "pnpm --filter @clipforge/web build",
+    "dev": "pnpm --filter @clipforge/web dev",
+    "build": "pnpm --filter @clipforge/contracts build && pnpm --filter @clipforge/web build",
+    "typecheck": "pnpm --recursive run typecheck",
     "lint": "pnpm --filter @clipforge/web lint"
   },
   "devDependencies": {

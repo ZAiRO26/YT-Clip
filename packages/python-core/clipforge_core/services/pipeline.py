@@ -7,6 +7,7 @@ can show granular progress (per requirement #6).
 
 Pipeline: download -> orchestrate_remaining (transcribe -> select -> crop -> caption)
 """
+
 import asyncio
 import json
 import logging
@@ -61,10 +62,14 @@ def _update_job(project_id: str, stage: str, status: str, error_message: str | N
     """Update a specific job stage status."""
     session = get_sync_session()
     try:
-        job = session.query(Job).filter(
-            Job.project_id == uuid.UUID(project_id),
-            Job.stage == stage,
-        ).first()
+        job = (
+            session.query(Job)
+            .filter(
+                Job.project_id == uuid.UUID(project_id),
+                Job.stage == stage,
+            )
+            .first()
+        )
         if job:
             job.status = status
             job.error_message = error_message
@@ -123,9 +128,14 @@ def _update_clips_with_files(project_id: str, final_clips: list[dict]) -> None:
     """Update clip records with file URLs after processing."""
     session = get_sync_session()
     try:
-        db_clips = session.query(Clip).filter(
-            Clip.project_id == uuid.UUID(project_id),
-        ).order_by(Clip.start_sec).all()
+        db_clips = (
+            session.query(Clip)
+            .filter(
+                Clip.project_id == uuid.UUID(project_id),
+            )
+            .order_by(Clip.start_sec)
+            .all()
+        )
 
         for db_clip, final in zip(db_clips, final_clips):
             db_clip.file_url = final.get("final_path", "")
@@ -175,6 +185,7 @@ def run_post_download(
 
     try:
         from clipforge_core.workers.transcribe import transcribe_audio
+
         transcript = transcribe_audio(source_path, project_dir)
         _update_job(project_id, "transcribe", "success")
         logger.info(f"[Pipeline] Transcribe done: {transcript['segment_count']} segments")
@@ -193,16 +204,19 @@ def run_post_download(
 
     try:
         from clipforge_core.workers.select import select_clips
-        selections_result = asyncio.run(select_clips(
-            transcript_path=transcript_path,
-            campaign_brief=campaign_brief,
-            clip_count=clip_count,
-            min_length_sec=min_length_sec,
-            max_length_sec=max_length_sec,
-            custom_prompt=custom_prompt,
-            time_range_start=time_range_start,
-            time_range_end=time_range_end,
-        ))
+
+        selections_result = asyncio.run(
+            select_clips(
+                transcript_path=transcript_path,
+                campaign_brief=campaign_brief,
+                clip_count=clip_count,
+                min_length_sec=min_length_sec,
+                max_length_sec=max_length_sec,
+                custom_prompt=custom_prompt,
+                time_range_start=time_range_start,
+                time_range_end=time_range_end,
+            )
+        )
         selections = selections_result["clips"]
         _update_job(project_id, "select", "success")
         logger.info(f"[Pipeline] Selected {len(selections)} clips via LLM")
@@ -215,14 +229,15 @@ def run_post_download(
             start = i * (total_dur / max(1, clip_count))
             end = min(start + clip_duration, total_dur)
             if end - start >= min_length_sec:
-                selections.append({
-                    "start_sec": round(start, 3),
-                    "end_sec": round(end, 3),
-                    "score": 0.5,
-                    "reasoning": "Fallback: evenly-spaced (LLM unavailable)",
-                })
-        _update_job(project_id, "select", "success",
-                     error_message="Used fallback selection (LLM unavailable)")
+                selections.append(
+                    {
+                        "start_sec": round(start, 3),
+                        "end_sec": round(end, 3),
+                        "score": 0.5,
+                        "reasoning": "Fallback: evenly-spaced (LLM unavailable)",
+                    }
+                )
+        _update_job(project_id, "select", "success", error_message="Used fallback selection (LLM unavailable)")
 
     if not selections:
         _update_job(project_id, "select", "failed", "No clips could be selected")
@@ -238,6 +253,7 @@ def run_post_download(
     _update_project(project_id, "encoding")
 
     from clipforge_core.workers.crop import crop_clip
+
     clips_dir = Path(project_dir) / "clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
 
@@ -298,10 +314,10 @@ def run_post_download(
         idx = clip["index"]
         # Determine duration for smart frame extraction
         duration = clip.get("end_sec", 0) - clip.get("start_sec", 0)
-        
+
         # We generate the thumbnail from the cropped (or final) video
         thumb_path = str(clips_dir / f"clip_{idx:03d}_thumb.jpg")
-        
+
         if generate_thumbnail(clip["final_path"], thumb_path, duration):
             clip["thumbnail_url"] = thumb_path
         else:
@@ -331,6 +347,7 @@ def dispatch_pipeline(project_id: str, project: Project) -> str:
     Returns the Celery chain task ID.
     """
     from celery import chain as celery_chain
+
     from clipforge_core.workers.download import download_source
 
     pid = str(project.id)
@@ -408,8 +425,7 @@ def run_reclip(
         start = time_range_start or 0.0
         end = time_range_end or transcript.get("duration_sec", 999999)
         filtered_segments = [
-            seg for seg in transcript.get("segments", [])
-            if seg["end"] >= start and seg["start"] <= end
+            seg for seg in transcript.get("segments", []) if seg["end"] >= start and seg["start"] <= end
         ]
         transcript["segments"] = filtered_segments
         transcript["full_text"] = " ".join(seg["text"] for seg in filtered_segments)
@@ -428,14 +444,17 @@ def run_reclip(
 
     try:
         from clipforge_core.workers.select import select_clips
-        selections_result = asyncio.run(select_clips(
-            transcript_path=transcript_path,
-            campaign_brief=campaign_brief,
-            clip_count=clip_count,
-            min_length_sec=min_length_sec,
-            max_length_sec=max_length_sec,
-            custom_prompt=custom_prompt,
-        ))
+
+        selections_result = asyncio.run(
+            select_clips(
+                transcript_path=transcript_path,
+                campaign_brief=campaign_brief,
+                clip_count=clip_count,
+                min_length_sec=min_length_sec,
+                max_length_sec=max_length_sec,
+                custom_prompt=custom_prompt,
+            )
+        )
         selections = selections_result["clips"]
         _update_job(project_id, "select", "success")
         logger.info(f"[Reclip] Selected {len(selections)} clips via LLM")
@@ -450,14 +469,15 @@ def run_reclip(
             start = offset + i * (total_dur / max(1, clip_count))
             end = min(start + clip_duration, (time_range_end or transcript.get("duration_sec", 999999)))
             if end - start >= min_length_sec:
-                selections.append({
-                    "start_sec": round(start, 3),
-                    "end_sec": round(end, 3),
-                    "score": 0.5,
-                    "reasoning": "Fallback: evenly-spaced (LLM unavailable)",
-                })
-        _update_job(project_id, "select", "success",
-                     error_message="Used fallback selection (LLM unavailable)")
+                selections.append(
+                    {
+                        "start_sec": round(start, 3),
+                        "end_sec": round(end, 3),
+                        "score": 0.5,
+                        "reasoning": "Fallback: evenly-spaced (LLM unavailable)",
+                    }
+                )
+        _update_job(project_id, "select", "success", error_message="Used fallback selection (LLM unavailable)")
 
     if not selections:
         _update_job(project_id, "select", "failed", "No clips could be selected")
@@ -472,11 +492,13 @@ def run_reclip(
     _update_project(project_id, "encoding")
 
     from clipforge_core.workers.crop import crop_clip
+
     clips_dir = Path(project_dir) / "clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
 
     # Use a timestamp suffix to avoid overwriting existing clips
     import time
+
     batch_id = str(int(time.time()))
 
     cropped_clips = []
@@ -536,7 +558,7 @@ def run_reclip(
         idx = clip["index"]
         duration = clip.get("end_sec", 0) - clip.get("start_sec", 0)
         thumb_path = str(clips_dir / f"clip_{batch_id}_{idx:03d}_thumb.jpg")
-        
+
         if generate_thumbnail(clip["final_path"], thumb_path, duration):
             clip["thumbnail_url"] = thumb_path
         else:
@@ -573,16 +595,18 @@ def dispatch_reclip(
     time_range_end: float | None = None,
 ) -> str:
     """Dispatch a reclip task for an existing project."""
-    result = run_reclip.apply_async(kwargs={
-        "project_id": project_id,
-        "clip_count": clip_count,
-        "min_length_sec": min_length_sec,
-        "max_length_sec": max_length_sec,
-        "aspect_ratio": aspect_ratio,
-        "caption_style": caption_style,
-        "custom_prompt": custom_prompt,
-        "time_range_start": time_range_start,
-        "time_range_end": time_range_end,
-    })
+    result = run_reclip.apply_async(
+        kwargs={
+            "project_id": project_id,
+            "clip_count": clip_count,
+            "min_length_sec": min_length_sec,
+            "max_length_sec": max_length_sec,
+            "aspect_ratio": aspect_ratio,
+            "caption_style": caption_style,
+            "custom_prompt": custom_prompt,
+            "time_range_start": time_range_start,
+            "time_range_end": time_range_end,
+        }
+    )
     logger.info(f"Reclip dispatched for project {project_id}, task_id={result.id}")
     return result.id

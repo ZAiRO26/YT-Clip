@@ -2,6 +2,7 @@
 Run SQL migration files against the database.
 Usage: uv run python -m migrations.run
 """
+
 import os
 import sys
 from pathlib import Path
@@ -28,9 +29,9 @@ def run_migration(filepath: Path) -> None:
     conn_str = get_connection_string()
     sql = filepath.read_text(encoding="utf-8")
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Running migration: {filepath.name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     conn = psycopg2.connect(conn_str)
     conn.autocommit = True
@@ -62,9 +63,9 @@ def main() -> None:
     for sql_file in sql_files:
         run_migration(sql_file)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("All migrations complete.")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
 
 if __name__ == "__main__":

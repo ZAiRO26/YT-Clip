@@ -1,14 +1,17 @@
 """
 ClipForge AI — FastAPI Application Entry Point
 """
+
+from pathlib import Path
+
+from clipforge_core.config import settings
+from clipforge_core.services.llm_client import llm_client
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pathlib import Path
 
 from app.api.routes import router as api_router
-from clipforge_core.config import settings
-from clipforge_core.services.llm_client import llm_client
+from app.api.settings import router as settings_router
 
 app = FastAPI(
     title="ClipForge AI",
@@ -23,9 +26,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Register API routes
-from app.api.settings import router as settings_router
 
 app.include_router(api_router)
 app.include_router(settings_router)

@@ -14,6 +14,7 @@ Output: {MEDIA_DIR}/{project_id}/selections.json
 
 Celery queue: select (concurrency=3 in production, rate-limited to LLM provider limits)
 """
+
 import json
 import logging
 import uuid
@@ -21,7 +22,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from clipforge_core.celery_app import celery_app
-from clipforge_core.config import settings
 from clipforge_core.database import get_sync_session
 from clipforge_core.models import Job, Project
 from clipforge_core.services.llm_client import LLMClientError, llm_client
@@ -76,7 +76,7 @@ def _build_selection_prompt(
 
     prompt = f"""## SOURCE VIDEO TRANSCRIPT
 Total duration: {total_duration:.1f} seconds
-Language: {transcript.get('language', 'unknown')}
+Language: {transcript.get("language", "unknown")}
 
 {transcript_text}
 
@@ -121,10 +121,14 @@ def _update_job_status(
     """Update the select job status in the database."""
     session = get_sync_session()
     try:
-        job = session.query(Job).filter(
-            Job.project_id == uuid.UUID(project_id),
-            Job.stage == "select",
-        ).first()
+        job = (
+            session.query(Job)
+            .filter(
+                Job.project_id == uuid.UUID(project_id),
+                Job.stage == "select",
+            )
+            .first()
+        )
 
         if job:
             job.status = status
@@ -147,9 +151,13 @@ def _update_project_status(project_id: str, status: str) -> None:
     """Update the project-level status."""
     session = get_sync_session()
     try:
-        project = session.query(Project).filter(
-            Project.id == uuid.UUID(project_id),
-        ).first()
+        project = (
+            session.query(Project)
+            .filter(
+                Project.id == uuid.UUID(project_id),
+            )
+            .first()
+        )
         if project:
             project.status = status
             session.commit()
@@ -194,10 +202,7 @@ def _validate_selections(
 
             duration = end - start
             if duration < min_length_sec or duration > max_length_sec:
-                logger.warning(
-                    f"Skipping clip: duration {duration:.1f}s outside "
-                    f"[{min_length_sec}, {max_length_sec}]"
-                )
+                logger.warning(f"Skipping clip: duration {duration:.1f}s outside [{min_length_sec}, {max_length_sec}]")
                 continue
 
             if end > total_duration + 1:  # 1s tolerance
@@ -207,12 +212,14 @@ def _validate_selections(
             # Clamp score
             score = max(0.0, min(1.0, score))
 
-            valid_clips.append({
-                "start_sec": round(start, 3),
-                "end_sec": round(end, 3),
-                "score": round(score, 3),
-                "reasoning": reasoning,
-            })
+            valid_clips.append(
+                {
+                    "start_sec": round(start, 3),
+                    "end_sec": round(end, 3),
+                    "score": round(score, 3),
+                    "reasoning": reasoning,
+                }
+            )
 
         except (ValueError, TypeError) as e:
             logger.warning(f"Skipping invalid clip entry: {e}")
@@ -253,15 +260,14 @@ async def select_clips(
         raise FileNotFoundError(f"Transcript not found: {transcript_path}")
 
     transcript = json.loads(transcript_file.read_text(encoding="utf-8"))
-    
+
     if time_range_start is not None or time_range_end is not None:
         start = time_range_start or 0.0
         end = time_range_end or transcript.get("duration_sec", 999999)
         transcript["segments"] = [
-            seg for seg in transcript.get("segments", [])
-            if seg["end"] >= start and seg["start"] <= end
+            seg for seg in transcript.get("segments", []) if seg["end"] >= start and seg["start"] <= end
         ]
-        
+
     total_duration = transcript.get("duration_sec", 0)
 
     # Build prompt
@@ -274,10 +280,7 @@ async def select_clips(
         custom_prompt=custom_prompt,
     )
 
-    logger.info(
-        f"Requesting {clip_count} clips "
-        f"({min_length_sec}-{max_length_sec}s) from {total_duration:.1f}s source"
-    )
+    logger.info(f"Requesting {clip_count} clips ({min_length_sec}-{max_length_sec}s) from {total_duration:.1f}s source")
 
     # Call LLM for structured JSON response
     raw_response = await llm_client.complete_json(
@@ -349,20 +352,21 @@ def select_highlights(
 
     try:
         # Run the async function in a new event loop
-        result = asyncio.run(select_clips(
-            transcript_path=transcript_path,
-            campaign_brief=campaign_brief,
-            clip_count=clip_count,
-            min_length_sec=min_length_sec,
-            max_length_sec=max_length_sec,
-        ))
+        result = asyncio.run(
+            select_clips(
+                transcript_path=transcript_path,
+                campaign_brief=campaign_brief,
+                clip_count=clip_count,
+                min_length_sec=min_length_sec,
+                max_length_sec=max_length_sec,
+            )
+        )
 
         result["project_id"] = project_id
 
         _update_job_status(project_id, "success")
         logger.info(
-            f"[Select] Complete for project {project_id}: "
-            f"{result['total_found']}/{result['requested']} clips selected"
+            f"[Select] Complete for project {project_id}: {result['total_found']}/{result['requested']} clips selected"
         )
 
         return result

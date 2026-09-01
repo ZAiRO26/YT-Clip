@@ -13,6 +13,7 @@ Output: {MEDIA_DIR}/{project_id}/transcript.json
 
 Celery queue: transcribe (concurrency=2 in production, CPU-bound)
 """
+
 import json
 import logging
 import uuid
@@ -67,10 +68,14 @@ def _update_job_status(
     """Update the transcribe job status in the database."""
     session = get_sync_session()
     try:
-        job = session.query(Job).filter(
-            Job.project_id == uuid.UUID(project_id),
-            Job.stage == "transcribe",
-        ).first()
+        job = (
+            session.query(Job)
+            .filter(
+                Job.project_id == uuid.UUID(project_id),
+                Job.stage == "transcribe",
+            )
+            .first()
+        )
 
         if job:
             job.status = status
@@ -93,9 +98,13 @@ def _update_project_status(project_id: str, status: str) -> None:
     """Update the project-level status."""
     session = get_sync_session()
     try:
-        project = session.query(Project).filter(
-            Project.id == uuid.UUID(project_id),
-        ).first()
+        project = (
+            session.query(Project)
+            .filter(
+                Project.id == uuid.UUID(project_id),
+            )
+            .first()
+        )
         if project:
             project.status = status
             session.commit()
@@ -134,7 +143,7 @@ def transcribe_audio(source_path: str, output_dir: str) -> dict:
         str(source),
         beam_size=5,
         word_timestamps=True,
-        vad_filter=True,           # Voice Activity Detection — skip silence
+        vad_filter=True,  # Voice Activity Detection — skip silence
         vad_parameters=dict(
             min_silence_duration_ms=500,
         ),
@@ -150,12 +159,14 @@ def transcribe_audio(source_path: str, output_dir: str) -> dict:
         words = []
         if segment.words:
             for word in segment.words:
-                words.append({
-                    "start": round(word.start, 3),
-                    "end": round(word.end, 3),
-                    "word": word.word.strip(),
-                    "probability": round(word.probability, 3),
-                })
+                words.append(
+                    {
+                        "start": round(word.start, 3),
+                        "end": round(word.end, 3),
+                        "word": word.word.strip(),
+                        "probability": round(word.probability, 3),
+                    }
+                )
 
         seg_data = {
             "id": len(segments),
@@ -183,8 +194,7 @@ def transcribe_audio(source_path: str, output_dir: str) -> dict:
     output_path.write_text(json.dumps(transcript, indent=2, ensure_ascii=False), encoding="utf-8")
 
     logger.info(
-        f"Transcription complete: {len(segments)} segments, "
-        f"{len(full_text)} chars, {info.duration:.1f}s duration"
+        f"Transcription complete: {len(segments)} segments, {len(full_text)} chars, {info.duration:.1f}s duration"
     )
 
     return transcript

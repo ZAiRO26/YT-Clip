@@ -4,15 +4,16 @@ ClipForge AI — Pydantic Schemas
 Request/response models for all API endpoints.
 Per Backend Schema section 05 of context.md.
 """
+
 from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-
 # ============================================
 # Campaign Briefs
 # ============================================
+
 
 class CampaignBriefCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
@@ -39,6 +40,7 @@ class CampaignBriefResponse(BaseModel):
 # ============================================
 # Projects
 # ============================================
+
 
 class ProjectCreate(BaseModel):
     source_type: str = Field(..., pattern="^(youtube_url|local_folder)$")
@@ -100,6 +102,7 @@ class ProjectListItem(BaseModel):
 # Clips
 # ============================================
 
+
 class ClipResponse(BaseModel):
     id: UUID
     project_id: UUID
@@ -128,12 +131,15 @@ class ThumbnailRequest(BaseModel):
 # Generic
 # ============================================
 
+
 class MessageResponse(BaseModel):
     message: str
     detail: str | None = None
 
+
 class ExportRequest(BaseModel):
     export_path: str = Field(..., description="Absolute path on the host machine to export clips to")
+
 
 class ReclipRequest(BaseModel):
     clip_count: int = Field(default=5, ge=1, le=50)

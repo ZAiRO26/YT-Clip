@@ -4,7 +4,8 @@
 - **Branch:** `feature/clipforge-v2-foundation`
 - **Phase 0 (Product Policy & Documentation):** ✅ Complete
 - **Phase 1, Task 1 (Initialize Monorepo):** ✅ Complete
-- **Next Task:** Phase 1, Task 2 (Configure pnpm workspace and uv Python workspace)
+- **Phase 1, Task 2 (Configure Workspaces):** ✅ Complete
+- **Next Task:** Phase 1, Task 3 (Add Docker Compose: Postgres 16, Redis 7, MinIO, API, worker)
 
 ## v1 Baseline
 - `master` branch contains the QA-verified v1 codebase (commit `f342cbe`).

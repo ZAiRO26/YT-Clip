@@ -18,6 +18,8 @@ Usage:
         system="You are a video editor...",
     )
 """
+
+import asyncio
 import json
 import logging
 from typing import Any
@@ -66,30 +68,33 @@ class LLMClient:
 
     async def _get_dynamic_settings(self):
         """Fetch latest settings from DB or use defaults."""
-        from clipforge_core.database import async_session_factory
         from sqlalchemy import text
-        
+
+        from clipforge_core.database import async_session_factory
+
         try:
             async with async_session_factory() as session:
                 # Check if table exists
-                res = await session.execute(text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'settings')"))
+                res = await session.execute(
+                    text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'settings')")
+                )
                 if not res.scalar():
                     return self._default_base_url, self._default_api_key, self._default_model
-                
+
                 # Fetch
                 base_url = await session.execute(text("SELECT value FROM settings WHERE key = 'llm_base_url'"))
                 base_url = base_url.scalar()
-                
+
                 api_key = await session.execute(text("SELECT value FROM settings WHERE key = 'llm_api_key'"))
                 api_key = api_key.scalar()
-                
+
                 model = await session.execute(text("SELECT value FROM settings WHERE key = 'llm_model'"))
                 model = model.scalar()
-                
+
                 return (
                     base_url.strip('"') if base_url else self._default_base_url,
                     api_key.strip('"') if api_key else self._default_api_key,
-                    model.strip('"') if model else self._default_model
+                    model.strip('"') if model else self._default_model,
                 )
         except Exception as e:
             logger.warning(f"Failed to fetch dynamic settings, using defaults: {e}")
@@ -156,7 +161,9 @@ class LLMClient:
             LLMClientError: If the response is not valid JSON
         """
         # Reinforce JSON instruction in the system prompt
-        json_system = (system or "") + "\n\nYou MUST respond with valid JSON only. No markdown, no code fences, no explanation."
+        json_system = (
+            system or ""
+        ) + "\n\nYou MUST respond with valid JSON only. No markdown, no code fences, no explanation."
 
         messages = []
         messages.append({"role": "system", "content": json_system.strip()})
@@ -176,7 +183,7 @@ class LLMClient:
             if cleaned.startswith("```"):
                 lines = cleaned.split("\n")
                 # Remove first line (```json) and last line (```)
-                lines = [l for l in lines[1:] if not l.strip().startswith("```")]
+                lines = [line for line in lines[1:] if not line.strip().startswith("```")]
                 cleaned = "\n".join(lines)
             return json.loads(cleaned)
         except json.JSONDecodeError as e:
@@ -195,7 +202,7 @@ class LLMClient:
     ) -> str:
         """Internal method to make the actual API call with retry logic."""
         base_url, api_key, model = await self._get_dynamic_settings()
-        
+
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -226,9 +233,9 @@ class LLMClient:
                     if provider_info:
                         logger.info(f"LLM Success: {model} via {provider_info}")
                     return content
-                
+
                 if response.status_code == 429:
-                    retry_after = int(response.headers.get("retry-after", 2 ** attempt))
+                    retry_after = int(response.headers.get("retry-after", 2**attempt))
                     logger.warning(f"Rate limited. Retrying in {retry_after}s...")
                     await asyncio.sleep(retry_after)
                     continue
@@ -236,20 +243,20 @@ class LLMClient:
                 raise LLMClientError(
                     f"LLM gateway returned HTTP {response.status_code}: {response.text[:100]}",
                     provider_info=provider_info,
-                    retryable=response.status_code >= 500
+                    retryable=response.status_code >= 500,
                 )
 
             except (httpx.ConnectError, httpx.TimeoutException) as e:
                 if attempt == self.max_retries:
                     raise LLMClientError(f"Connection failed after {self.max_retries} attempts: {e}")
-                await asyncio.sleep(2 ** attempt)
+                await asyncio.sleep(2**attempt)
 
         raise LLMClientError(f"Failed to get completion after {self.max_retries} retries")
 
     async def health_check(self) -> dict[str, Any]:
         """Check if the LLM gateway is reachable and responding."""
         base_url, api_key, model = await self._get_dynamic_settings()
-        
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(

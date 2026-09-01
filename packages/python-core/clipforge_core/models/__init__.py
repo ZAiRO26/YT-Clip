@@ -2,8 +2,8 @@
 ClipForge AI — SQLAlchemy ORM Models
 Maps to the Postgres schema defined in migrations/001_initial_schema.sql
 """
+
 import uuid
-from datetime import datetime
 
 from sqlalchemy import (
     CheckConstraint,
@@ -13,7 +13,6 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    String,
     Text,
     text,
 )
@@ -23,6 +22,7 @@ from sqlalchemy.orm import DeclarativeBase, relationship
 
 class Base(DeclarativeBase):
     """Base class for all ORM models."""
+
     pass
 
 
@@ -51,9 +51,7 @@ class CampaignBrief(Base):
     owner = relationship("User", back_populates="campaign_briefs")
     projects = relationship("Project", back_populates="campaign_brief")
 
-    __table_args__ = (
-        Index("idx_campaign_briefs_owner", "owner_id"),
-    )
+    __table_args__ = (Index("idx_campaign_briefs_owner", "owner_id"),)
 
 
 class Project(Base):

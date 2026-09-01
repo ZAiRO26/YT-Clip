@@ -4,6 +4,7 @@ ClipForge AI — Application Settings
 All config loaded from environment variables via pydantic-settings.
 See .env.example for the full list.
 """
+
 from pydantic_settings import BaseSettings
 
 

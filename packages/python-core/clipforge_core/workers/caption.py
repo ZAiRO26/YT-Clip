@@ -12,7 +12,7 @@ Output: {MEDIA_DIR}/{project_id}/clips/{clip_index}_final.mp4
 
 Celery queue: caption (concurrency=2 in production, CPU-bound)
 """
-import json
+
 import logging
 import shutil
 import subprocess
@@ -23,7 +23,7 @@ from pathlib import Path
 from clipforge_core.celery_app import celery_app
 from clipforge_core.config import settings
 from clipforge_core.database import get_sync_session
-from clipforge_core.models import Clip, Job, Project
+from clipforge_core.models import Job, Project
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +71,14 @@ def _update_job_status(
     """Update the caption job status in the database."""
     session = get_sync_session()
     try:
-        job = session.query(Job).filter(
-            Job.project_id == uuid.UUID(project_id),
-            Job.stage == "caption",
-        ).first()
+        job = (
+            session.query(Job)
+            .filter(
+                Job.project_id == uuid.UUID(project_id),
+                Job.stage == "caption",
+            )
+            .first()
+        )
         if job:
             job.status = status
             job.error_message = error_message
@@ -94,9 +98,13 @@ def _update_project_status(project_id: str, status: str) -> None:
     """Update the project-level status."""
     session = get_sync_session()
     try:
-        project = session.query(Project).filter(
-            Project.id == uuid.UUID(project_id),
-        ).first()
+        project = (
+            session.query(Project)
+            .filter(
+                Project.id == uuid.UUID(project_id),
+            )
+            .first()
+        )
         if project:
             project.status = status
             session.commit()
@@ -219,13 +227,20 @@ def _caption_with_ffmpeg_srt(
 
         # Use Fontstyle that supports Devanagari/Hindi and other non-Latin scripts
         cmd = [
-            "ffmpeg", "-y",
-            "-i", input_path,
-            "-vf", f"subtitles='{srt_escaped}':force_style='FontName=Noto Sans,FontSize={font_size},PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2,Alignment=2,MarginV=40'",
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "23",
-            "-c:a", "copy",
+            "ffmpeg",
+            "-y",
+            "-i",
+            input_path,
+            "-vf",
+            f"subtitles='{srt_escaped}':force_style='FontName=Noto Sans,FontSize={font_size},PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2,Alignment=2,MarginV=40'",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "23",
+            "-c:a",
+            "copy",
             output_path,
         ]
 
@@ -327,10 +342,7 @@ def caption_clips(
 
     Does NOT fail the whole job if captioning fails on one clip.
     """
-    logger.info(
-        f"[Caption] Starting for project {project_id}: "
-        f"{len(cropped_clips)} clips, style={caption_style}"
-    )
+    logger.info(f"[Caption] Starting for project {project_id}: {len(cropped_clips)} clips, style={caption_style}")
 
     _update_job_status(project_id, "running")
     _update_project_status(project_id, "captioning")
@@ -357,17 +369,12 @@ def caption_clips(
                 # Generate thumbnail
                 thumbnail_filename = f"clip_{index:03d}_thumb.jpg"
                 thumbnail_path = str(Path(cropped_path).parent / thumbnail_filename)
-                
+
                 try:
                     import subprocess
+
                     subprocess.run(
-                        [
-                            "ffmpeg", "-y",
-                            "-i", final_path,
-                            "-vframes", "1",
-                            "-q:v", "2",
-                            thumbnail_path
-                        ],
+                        ["ffmpeg", "-y", "-i", final_path, "-vframes", "1", "-q:v", "2", thumbnail_path],
                         check=True,
                         capture_output=True,
                     )
@@ -389,17 +396,16 @@ def caption_clips(
                 }
                 final_clips.append(final_clip)
 
-                logger.info(
-                    f"[Caption] Clip {index}: {caption_result['method']} "
-                    f"({caption_result['file_size_mb']} MB)"
-                )
+                logger.info(f"[Caption] Clip {index}: {caption_result['method']} ({caption_result['file_size_mb']} MB)")
 
             except Exception as e:
                 logger.error(f"[Caption] Failed on clip {index}: {e}")
-                failed_clips.append({
-                    "index": index,
-                    "error": str(e),
-                })
+                failed_clips.append(
+                    {
+                        "index": index,
+                        "error": str(e),
+                    }
+                )
 
         if not final_clips:
             error_msg = f"All {len(cropped_clips)} clips failed captioning"
@@ -421,8 +427,7 @@ def caption_clips(
         _update_project_status(project_id, "done")
 
         logger.info(
-            f"[Caption] Complete for project {project_id}: "
-            f"{len(final_clips)} captioned, {len(failed_clips)} failed"
+            f"[Caption] Complete for project {project_id}: {len(final_clips)} captioned, {len(failed_clips)} failed"
         )
 
         return result

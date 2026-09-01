@@ -13,7 +13,7 @@ Output: {MEDIA_DIR}/{project_id}/clips/{clip_index}_cropped.mp4
 
 Celery queue: crop (concurrency=2 in production, CPU-bound)
 """
-import json
+
 import logging
 import subprocess
 import uuid
@@ -21,7 +21,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from clipforge_core.celery_app import celery_app
-from clipforge_core.config import settings
 from clipforge_core.database import get_sync_session
 from clipforge_core.models import Job, Project
 
@@ -43,10 +42,14 @@ def _update_job_status(
     """Update the crop job status in the database."""
     session = get_sync_session()
     try:
-        job = session.query(Job).filter(
-            Job.project_id == uuid.UUID(project_id),
-            Job.stage == "crop",
-        ).first()
+        job = (
+            session.query(Job)
+            .filter(
+                Job.project_id == uuid.UUID(project_id),
+                Job.stage == "crop",
+            )
+            .first()
+        )
         if job:
             job.status = status
             job.error_message = error_message
@@ -66,9 +69,13 @@ def _update_project_status(project_id: str, status: str) -> None:
     """Update the project-level status."""
     session = get_sync_session()
     try:
-        project = session.query(Project).filter(
-            Project.id == uuid.UUID(project_id),
-        ).first()
+        project = (
+            session.query(Project)
+            .filter(
+                Project.id == uuid.UUID(project_id),
+            )
+            .first()
+        )
         if project:
             project.status = status
             session.commit()
@@ -97,11 +104,7 @@ def _center_crop_ffmpeg(
     # Build the filter: scale to fit height, then center-crop to exact dimensions
     if target_width < target_height:
         # Portrait (9:16) — scale to match height, crop width
-        vf = (
-            f"scale=-1:{target_height},"
-            f"crop={target_width}:{target_height},"
-            f"setsar=1"
-        )
+        vf = f"scale=-1:{target_height},crop={target_width}:{target_height},setsar=1"
     elif target_width == target_height:
         # Square (1:1) — scale to fit the smaller dimension, then crop
         vf = (
@@ -119,17 +122,27 @@ def _center_crop_ffmpeg(
 
     cmd = [
         "ffmpeg",
-        "-y",                           # Overwrite output
-        "-ss", str(start_sec),          # Seek to start (before input for speed)
-        "-i", source_path,
-        "-t", str(duration),            # Duration
-        "-vf", vf,
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-movflags", "+faststart",
+        "-y",  # Overwrite output
+        "-ss",
+        str(start_sec),  # Seek to start (before input for speed)
+        "-i",
+        source_path,
+        "-t",
+        str(duration),  # Duration
+        "-vf",
+        vf,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "23",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-movflags",
+        "+faststart",
         output_path,
     ]
 
@@ -183,11 +196,16 @@ def _clipsai_crop(
         duration = end_sec - start_sec
 
         extract_cmd = [
-            "ffmpeg", "-y",
-            "-ss", str(start_sec),
-            "-i", source_path,
-            "-t", str(duration),
-            "-c", "copy",
+            "ffmpeg",
+            "-y",
+            "-ss",
+            str(start_sec),
+            "-i",
+            source_path,
+            "-t",
+            str(duration),
+            "-c",
+            "copy",
             temp_segment,
         ]
 
@@ -197,7 +215,7 @@ def _clipsai_crop(
             return False
 
         # Use ClipsAI to resize with face tracking
-        resized = resize.resize_video(
+        resize.resize_video(
             original_video_path=temp_segment,
             resized_video_path=output_path,
             aspect_ratio=ar_tuple,
@@ -261,17 +279,19 @@ def crop_clip(
     if not success:
         logger.info(f"Using center-crop fallback: {start_sec:.1f}s - {end_sec:.1f}s ({aspect_ratio})")
         success = _center_crop_ffmpeg(
-            source_path, output_path,
-            start_sec, end_sec,
-            target_w, target_h,
+            source_path,
+            output_path,
+            start_sec,
+            end_sec,
+            target_w,
+            target_h,
         )
         if success:
             method = "center_crop"
 
     if not success:
         raise RuntimeError(
-            f"Failed to crop clip {start_sec:.1f}s-{end_sec:.1f}s "
-            f"using both ClipsAI and center-crop fallback"
+            f"Failed to crop clip {start_sec:.1f}s-{end_sec:.1f}s using both ClipsAI and center-crop fallback"
         )
 
     file_size = Path(output_path).stat().st_size
@@ -346,18 +366,20 @@ def crop_clips(
                 cropped_clips.append(clip_result)
 
                 logger.info(
-                    f"[Crop] Clip {i+1}/{len(selections)}: "
+                    f"[Crop] Clip {i + 1}/{len(selections)}: "
                     f"{clip_result['duration_sec']:.1f}s via {clip_result['method']}"
                 )
 
             except Exception as e:
                 logger.error(f"[Crop] Failed on clip {i}: {e}")
-                failed_clips.append({
-                    "index": i,
-                    "start_sec": selection["start_sec"],
-                    "end_sec": selection["end_sec"],
-                    "error": str(e),
-                })
+                failed_clips.append(
+                    {
+                        "index": i,
+                        "start_sec": selection["start_sec"],
+                        "end_sec": selection["end_sec"],
+                        "error": str(e),
+                    }
+                )
 
         if not cropped_clips:
             error_msg = f"All {len(selections)} clips failed to crop"
@@ -375,8 +397,7 @@ def crop_clips(
 
         _update_job_status(project_id, "success")
         logger.info(
-            f"[Crop] Complete for project {project_id}: "
-            f"{len(cropped_clips)} cropped, {len(failed_clips)} failed"
+            f"[Crop] Complete for project {project_id}: {len(cropped_clips)} cropped, {len(failed_clips)} failed"
         )
 
         return result

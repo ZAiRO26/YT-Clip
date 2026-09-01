@@ -11,8 +11,8 @@ Per TRD section 2 and user requirements:
 
 Celery queue: download (concurrency=6 in production)
 """
+
 import logging
-import os
 import shutil
 import uuid
 from datetime import datetime, timezone
@@ -46,10 +46,14 @@ def _update_job_status(
     """Update the download job status in the database."""
     session = get_sync_session()
     try:
-        job = session.query(Job).filter(
-            Job.project_id == uuid.UUID(project_id),
-            Job.stage == "download",
-        ).first()
+        job = (
+            session.query(Job)
+            .filter(
+                Job.project_id == uuid.UUID(project_id),
+                Job.stage == "download",
+            )
+            .first()
+        )
 
         if job:
             job.status = status
@@ -72,9 +76,13 @@ def _update_project_status(project_id: str, status: str) -> None:
     """Update the project-level status."""
     session = get_sync_session()
     try:
-        project = session.query(Project).filter(
-            Project.id == uuid.UUID(project_id),
-        ).first()
+        project = (
+            session.query(Project)
+            .filter(
+                Project.id == uuid.UUID(project_id),
+            )
+            .first()
+        )
         if project:
             project.status = status
             session.commit()
@@ -124,10 +132,7 @@ def _download_youtube(url: str, output_path: Path) -> dict:
                 "upload_date": info.get("upload_date", ""),
             }
 
-            logger.info(
-                f"Downloading: {metadata['title']} "
-                f"({metadata['duration_sec']}s, {metadata['resolution']})"
-            )
+            logger.info(f"Downloading: {metadata['title']} ({metadata['duration_sec']}s, {metadata['resolution']})")
 
             # Now actually download
             ydl.download([url])
@@ -174,21 +179,14 @@ def _ingest_local_folder(folder_path: str, project_dir: Path) -> dict:
             }
         else:
             raise ValueError(
-                f"Not a supported video file: {source_dir.suffix}. "
-                f"Supported: {', '.join(VIDEO_EXTENSIONS)}"
+                f"Not a supported video file: {source_dir.suffix}. Supported: {', '.join(VIDEO_EXTENSIONS)}"
             )
 
     # Find video files in the folder
-    video_files = sorted([
-        f for f in source_dir.iterdir()
-        if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS
-    ])
+    video_files = sorted([f for f in source_dir.iterdir() if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS])
 
     if not video_files:
-        raise ValueError(
-            f"No video files found in {folder_path}. "
-            f"Supported formats: {', '.join(VIDEO_EXTENSIONS)}"
-        )
+        raise ValueError(f"No video files found in {folder_path}. Supported formats: {', '.join(VIDEO_EXTENSIONS)}")
 
     # For v1: use the first video file as the source
     # Copy it to the project directory as source.mp4
@@ -198,10 +196,7 @@ def _ingest_local_folder(folder_path: str, project_dir: Path) -> dict:
 
     file_size = dest.stat().st_size
 
-    logger.info(
-        f"Ingested local file: {source_file.name} "
-        f"({round(file_size / (1024 * 1024), 2)} MB)"
-    )
+    logger.info(f"Ingested local file: {source_file.name} ({round(file_size / (1024 * 1024), 2)} MB)")
 
     if len(video_files) > 1:
         logger.info(
