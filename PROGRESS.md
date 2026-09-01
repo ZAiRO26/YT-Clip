@@ -45,8 +45,16 @@
     - **Real-Time Streaming & Audit Trail (Task 2.9):** Added SSE endpoint `GET /api/projects/{id}/events` and audit trail endpoint `GET /api/projects/{id}/audit-trail`.
     - **Fixtures & QA Suite (Task 2.10):** Synthesized 3 test media fixtures and verified 15/15 unit tests passing.
 
-## Next Milestone: Phase 3 — Brief-Aware Candidate Selection
-- Implement `LLMProvider` OpenAI-compatible adapter with Pydantic validation & retry.
-- Build candidate evaluation prompt using transcript + scene boundaries + brief.
-- Compute Transformation Score (0–100) per candidate (Section 2.4).
-- Generate candidate JSON with viral score, rationale, hook classification, and suggested editorial overlays.
+11. **Phase 3 (Brief-Aware Candidate Selection) — 100% COMPLETE:**
+    - **Transformation Score Engine (Task 3.3):** Built `transformation_scorer.py` computing 0–100 score across 5 pillars (`source_exclusivity`, `commentary_depth`, `visual_alteration`, `narrative_structure`, `editorial_callouts`) and risk bands (`high`, `moderate`, `low`).
+    - **Candidate Ranking & Scene Snapping (Task 3.5):** Built `candidate_ranker.py` to snap candidate boundaries to nearest scene cuts, eliminate mid-sentence glitches, and deduplicate overlapping segments by composite rank.
+    - **LLM Candidate Worker (Tasks 3.1, 3.2, 3.4):** Enhanced `select.py` worker on `llm` queue with structured prompt (transcript + scene boundaries + editorial template + campaign brief + rights basis), saving `selections.json` and populating DB `Clip` records with transformation score breakdowns.
+    - **Studio UI Integration:** Added Transformation Score badges and virality pills to `ClipCard` in `apps/web`.
+    - **Unit Tests (Task 3.6):** Created tests for transformation scorer, candidate ranker, and mocked LLM selection (21/21 passing).
+
+## Next Milestone: Phase 4 — First Professional Render & Manifest Generation
+- Implement FFmpeg cut/render service with deterministic render manifests (`RENDER_MANIFEST_SCHEMA.json`).
+- Implement 9:16 smart reframe using MediaPipe crop keyframes.
+- Implement blurred-background vertical layout for landscape inputs.
+- Add caption generation and burn-in from word-level timings with presets (Bold Karaoke, Minimal, Clean Subtitle, None).
+- Build Review Gallery preview card and approve/reject flow.

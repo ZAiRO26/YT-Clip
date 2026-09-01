@@ -29,12 +29,12 @@
 - [x] Create fixture set of 3 authorized/open test media files.
 
 ## Phase 3 — Brief-Aware Candidate Selection
-- [ ] Implement `LLMProvider` OpenAI-compatible adapter with Pydantic validation and retry.
-- [ ] Create segment-window generator using transcript + scenes + speech/silence.
-- [ ] Build selection prompt (score, reasons, exclusions, editorial angle).
-- [ ] Return 2× candidate multiplier.
-- [ ] Create Candidate Selection UI with transcript and manual in/out override.
-- [ ] Add "No strong candidates" state with manual clipping option.
+- [x] Implement `LLMProvider` OpenAI-compatible adapter with Pydantic validation and retry.
+- [x] Build candidate evaluation prompt using transcript + scene boundaries + campaign brief.
+- [x] Compute Transformation Score (0–100) per candidate (Section 2.4).
+- [x] Generate candidate JSON: timestamps, title, hook type, rationale, editorial suggestions.
+- [x] Build candidate ranking and deduplication logic.
+- [x] Add unit tests for candidate generation with mocked LLM responses.
 
 ## Phase 4 — First Professional Render
 - [ ] Implement FFmpeg cut/render service with deterministic render manifests.

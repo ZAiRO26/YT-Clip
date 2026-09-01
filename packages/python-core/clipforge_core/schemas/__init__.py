@@ -214,3 +214,36 @@ class ExportRequest(BaseModel):
 class MessageResponse(BaseModel):
     message: str
     details: dict[str, Any] | None = None
+
+
+# ============================================
+# Candidate Selection & Transformation (context2-upgrade.md Section 2.4 & 3.3)
+# ============================================
+HookType = Literal[
+    "question",
+    "bold_statement",
+    "surprising_stat",
+    "story_loop",
+    "controversial_thesis",
+]
+
+
+class CandidateClipSchema(BaseModel):
+    start_sec: float
+    end_sec: float
+    title: str
+    hook_type: HookType = "bold_statement"
+    hook_text: str
+    key_takeaway: str
+    virality_score: float = Field(default=0.7, ge=0.0, le=1.0)
+    transformation_score: int = Field(default=75, ge=0, le=100)
+    transformation_breakdown: dict[str, int] = Field(default_factory=dict)
+    reasoning: str
+    suggested_callouts: list[str] = Field(default_factory=list)
+
+
+class CandidateSelectionResponse(BaseModel):
+    project_id: UUID
+    clips: list[CandidateClipSchema]
+    total_found: int
+

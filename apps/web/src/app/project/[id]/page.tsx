@@ -143,19 +143,40 @@ function ClipCard({
 
       {/* Info */}
       <div className="p-4 space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <span className="text-xs text-cf-muted">
             {clip.start_sec.toFixed(1)}s - {clip.end_sec.toFixed(1)}s ({duration.toFixed(0)}s)
           </span>
-          {clip.score !== null && (
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-              clip.score >= 0.7 ? "bg-cf-success/20 text-cf-success" :
-              clip.score >= 0.5 ? "bg-cf-warn/20 text-cf-warn" :
-              "bg-cf-muted/20 text-cf-muted"
-            }`}>
-              {(clip.score * 100).toFixed(0)}%
-            </span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {clip.transformation_score !== undefined && clip.transformation_score !== null && (
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                  clip.transformation_score >= 70
+                    ? "bg-cf-success/15 text-cf-success border-cf-success/30"
+                    : clip.transformation_score >= 40
+                    ? "bg-primary/15 text-primary border-primary/30"
+                    : "bg-cf-danger/15 text-cf-danger border-cf-danger/30"
+                }`}
+                title="Original Transformation Score (0-100)"
+              >
+                ✨ {clip.transformation_score}/100
+              </span>
+            )}
+            {clip.score !== null && (
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                  clip.score >= 0.7
+                    ? "bg-cf-accent/15 text-cf-accent border-cf-accent/30"
+                    : clip.score >= 0.5
+                    ? "bg-cf-warn/15 text-cf-warn border-cf-warn/30"
+                    : "bg-cf-muted/15 text-cf-muted border-border"
+                }`}
+                title="Viral Hook Potential"
+              >
+                🔥 {(clip.score * 100).toFixed(0)}%
+              </span>
+            )}
+          </div>
         </div>
 
         {clip.reasoning && (

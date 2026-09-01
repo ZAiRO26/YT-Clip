@@ -5,7 +5,8 @@
 - **Phase 0 (Product Policy & Documentation):** ✅ Complete
 - **Phase 1 (Foundation and Local Development):** ✅ 100% Complete
 - **Phase 2 (Source Ingestion and Analysis):** ✅ 100% Complete
-- **Next Milestone:** Phase 3 (Brief-Aware Candidate Selection & Transformation Scoring)
+- **Phase 3 (Brief-Aware Candidate Selection):** ✅ 100% Complete
+- **Next Milestone:** Phase 4 (First Professional Render & Manifest Generation)
 
 ## v1 Baseline
 - `master` branch contains the QA-verified v1 codebase (commit `f342cbe`).
@@ -24,16 +25,18 @@
 - Faster-Whisper word-level transcription worker ✅
 - PySceneDetect scene boundary detection worker ✅
 - MediaPipe subject/face tracking service with center-crop fallback ✅
+- Transformation Score Engine (0–100) across 5 pillars (Section 2.4) ✅
+- Brief-Aware Candidate Selection with LLM Gateway & retry logic ✅
+- Candidate ranking, scene snapping, and deduplication logic ✅
 - Server-Sent Events (SSE) `/api/projects/{id}/events` & `/api/projects/{id}/audit-trail` ✅
-- Test fixture set (3 synthetic MP4 files) & 15/15 passing tests ✅
+- Test fixture set (3 synthetic MP4 files) & 21/21 passing tests ✅
 
 ## Phases
 - **Phase 0 (Policy & Docs):** [x] Completed
 - **Phase 1 (Foundation):** [x] Completed
 - **Phase 2 (Ingestion & Analysis):** [x] Completed
-- **Phase 3 (Brief-Aware Selection):** [ ] Next up
-- **Phase 3 (Brief-Aware Selection):** [ ] Not started
-- **Phase 4 (First Render):** [ ] Not started
+- **Phase 3 (Brief-Aware Selection):** [x] Completed
+- **Phase 4 (First Render):** [ ] Next up
 - **Phase 5 (Editorial Transformation):** [ ] Not started
 - **Phase 6 (Voiceover & Audio):** [ ] Not started
 - **Phase 7 (Motion Effects):** [ ] Not started

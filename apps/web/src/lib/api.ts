@@ -73,9 +73,12 @@ export interface Clip {
   start_sec: number;
   end_sec: number;
   score: number | null;
+  transformation_score?: number | null;
+  transformation_breakdown?: Record<string, number> | null;
   reasoning: string | null;
   file_url: string | null;
   thumbnail_url: string | null;
+  render_manifest?: Record<string, unknown> | null;
   review_status: string;
   created_at: string;
 }

@@ -1,115 +1,108 @@
 """
-ClipForge AI — Select Worker
+ClipForge AI — Brief-Aware Candidate Selection Worker (v2)
 
-Pipeline stage 3: Use LLM to select highlight segments from transcript.
-
-Per TRD section 2 and user requirements:
-- LLM prompt takes full transcript (with timestamps) AND campaign brief JSON
-- Returns structured JSON: [{start_sec, end_sec, score, reasoning}]
-- Never free-text output that requires fragile parsing
-- Routes through OmniRoute/FreeLLMAPI (zero-cost inference)
-- Surfaces rate limits clearly per requirement #6
-
-Output: {MEDIA_DIR}/{project_id}/selections.json
-
-Celery queue: select (concurrency=3 in production, rate-limited to LLM provider limits)
+Pipeline stage 3 (LLM Queue):
+- Uses OpenAI-compatible LLM Gateway (OmniRoute/FreeLLMAPI)
+- Integrates transcript, scene boundaries, editorial template, rights basis, and campaign brief
+- Computes 0–100 Transformation Score and breakdown per Section 2.4
+- Snaps candidates to scene cut boundaries and deduplicates overlapping excerpts
+- Persists selections.json and populates Clip database records with transformation scores
 """
-
+import asyncio
 import json
 import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict, List
 
 from clipforge_core.celery_app import celery_app
+from clipforge_core.config import settings
 from clipforge_core.database import get_sync_session
-from clipforge_core.models import Job, Project
+from clipforge_core.models import Clip, Job, Project, ProjectAuditEvent
+from clipforge_core.services.candidate_ranker import deduplicate_and_rank_candidates
 from clipforge_core.services.llm_client import LLMClientError, llm_client
+from clipforge_core.services.transformation_scorer import calculate_transformation_score
 
 logger = logging.getLogger(__name__)
 
-# System prompt for clip selection
-SELECTION_SYSTEM_PROMPT = """You are a professional video editor AI assistant specializing in creating viral short-form clips from long-form video content.
+SELECTION_SYSTEM_PROMPT = """You are an expert video editor and transformation strategist for short-form social video (YouTube Shorts, TikTok, Instagram Reels).
 
-Your task is to analyze a video transcript and select the best segments for short-form vertical clips (YouTube Shorts, TikTok, Instagram Reels).
+Your task is to analyze a source video transcript, scene boundaries, and project brief to identify the highest-potential, transformation-ready clipping candidates.
 
-You MUST evaluate each potential segment against the provided campaign brief to ensure alignment with brand guidelines, tone, required mentions, and banned topics.
+EDITORIAL PRINCIPLES:
+1. Self-contained Narrative: Each clip must have a strong hook, clear body point/evidence, and a satisfying conclusion or punchline.
+2. High Transformation Potential: Favor moments where original commentary, callouts, and explanatory context add significant value.
+3. Natural Speech Boundaries: Start and end at natural pause points.
+4. Brief Alignment: Strictly adhere to the tone, required mentions, and banned topics in the campaign brief.
 
-SCORING CRITERIA (0.0 to 1.0):
-- 0.9-1.0: Perfect match — high-energy moment, matches campaign tone exactly, includes required mentions
-- 0.7-0.8: Strong match — engaging content, good campaign alignment
-- 0.5-0.6: Acceptable — decent content, partial campaign alignment
-- 0.3-0.4: Weak — content is okay but poor campaign alignment
-- 0.0-0.2: Reject — off-topic, contains banned topics, or boring
-
-SELECTION RULES:
-1. Each clip must be a self-contained moment that makes sense without context
-2. Prefer segments with clear speech, emotional peaks, humor, or surprising statements
-3. Avoid segments that are mid-sentence or cut off abruptly
-4. Ensure clips start and end at natural speech boundaries
-5. Never select segments containing banned topics from the campaign brief
-6. Prefer segments that include required mentions from the campaign brief
-7. Clips should not overlap with each other
-
-You MUST respond with valid JSON only. No markdown, no code fences, no explanation."""
+You MUST respond with valid JSON matching the requested schema exactly. No markdown fences, no conversational text."""
 
 
 def _build_selection_prompt(
     transcript: dict,
+    scenes: list,
     campaign_brief: dict,
+    editorial_template: str,
+    rights_basis: str,
     clip_count: int,
     min_length_sec: int,
     max_length_sec: int,
     custom_prompt: str | None = None,
 ) -> str:
-    """Build the LLM prompt for clip selection."""
-    # Format transcript segments with timestamps for the LLM
+    """Build structured LLM prompt."""
+    segments = transcript.get("segments", [])
     formatted_segments = []
-    for seg in transcript.get("segments", []):
-        start = seg["start"]
-        end = seg["end"]
-        text = seg["text"]
-        formatted_segments.append(f"[{start:.1f}s - {end:.1f}s] {text}")
+    for seg in segments:
+        s = seg.get("start", 0.0)
+        e = seg.get("end", 0.0)
+        t = seg.get("text", "").strip()
+        formatted_segments.append(f"[{s:.1f}s - {e:.1f}s] {t}")
 
     transcript_text = "\n".join(formatted_segments)
-    total_duration = transcript.get("duration_sec", 0)
+    total_duration = transcript.get("duration_sec", 0.0)
 
-    prompt = f"""## SOURCE VIDEO TRANSCRIPT
-Total duration: {total_duration:.1f} seconds
-Language: {transcript.get("language", "unknown")}
+    prompt = f"""## SOURCE VIDEO INFORMATION
+- Total Duration: {total_duration:.1f}s
+- Language: {transcript.get('language', 'unknown')}
+- Rights Basis: {rights_basis}
+- Editorial Template: {editorial_template}
 
+## TRANSCRIPT WITH TIMESTAMPS
 {transcript_text}
+
+## SCENE CUT BOUNDARIES (First 20)
+{json.dumps(scenes[:20], indent=2)}
 
 ## CAMPAIGN BRIEF
 {json.dumps(campaign_brief, indent=2)}
 
-## SPECIFIC INSTRUCTIONS FROM USER
-{custom_prompt if custom_prompt else "No specific instructions. Select the best general highlights based on the campaign brief."}
+## USER GUIDANCE
+{custom_prompt if custom_prompt else "Identify the most engaging standalone moments matching the campaign brief and editorial template."}
 
 ## TASK
-Select exactly {clip_count} highlight segments from the transcript above.
+Select up to {clip_count} highlight candidates.
+- Each clip duration MUST be between {min_length_sec} and {max_length_sec} seconds.
+- Clips should not overlap.
+- Hook Type must be one of: "question", "bold_statement", "surprising_stat", "story_loop", "controversial_thesis".
 
-CONSTRAINTS:
-- Each clip must be between {min_length_sec} and {max_length_sec} seconds long
-- Clips must not overlap
-- Score each clip 0.0-1.0 against the campaign brief
-- If fewer than {clip_count} quality segments exist, return as many as you can find (minimum score 0.3)
-
-## REQUIRED OUTPUT FORMAT
-Return a JSON object with this exact structure:
+## REQUIRED JSON FORMAT
+Return a JSON object:
 {{
-    "clips": [
-        {{
-            "start_sec": <float>,
-            "end_sec": <float>,
-            "score": <float between 0.0 and 1.0>,
-            "reasoning": "<one sentence explaining why this segment was selected and how it matches the campaign brief>"
-        }}
-    ],
-    "total_found": <int>,
-    "notes": "<optional: any notes about the selection, e.g. if fewer clips than requested>"
+  "clips": [
+    {{
+      "start_sec": 12.5,
+      "end_sec": 48.0,
+      "title": "Short punchy title",
+      "hook_type": "question",
+      "hook_text": "Did you know that...",
+      "key_takeaway": "Summary of main lesson or thesis",
+      "virality_score": 0.85,
+      "reasoning": "Why this moment was selected",
+      "suggested_callouts": ["Term 1", "Statistic 2"]
+    }}
+  ]
 }}"""
-
     return prompt
 
 
@@ -118,18 +111,17 @@ def _update_job_status(
     status: str,
     error_message: str | None = None,
 ) -> None:
-    """Update the select job status in the database."""
+    """Update select job status in DB."""
     session = get_sync_session()
     try:
         job = (
             session.query(Job)
             .filter(
                 Job.project_id == uuid.UUID(project_id),
-                Job.stage == "select",
+                Job.stage.in_(["select", "llm"]),
             )
             .first()
         )
-
         if job:
             job.status = status
             job.error_message = error_message
@@ -138,8 +130,6 @@ def _update_job_status(
             if status in ("success", "failed"):
                 job.completed_at = datetime.now(timezone.utc)
             session.commit()
-        else:
-            logger.warning(f"No select job found for project {project_id}")
     except Exception as e:
         logger.error(f"Failed to update job status: {e}")
         session.rollback()
@@ -148,16 +138,10 @@ def _update_job_status(
 
 
 def _update_project_status(project_id: str, status: str) -> None:
-    """Update the project-level status."""
+    """Update project status."""
     session = get_sync_session()
     try:
-        project = (
-            session.query(Project)
-            .filter(
-                Project.id == uuid.UUID(project_id),
-            )
-            .first()
-        )
+        project = session.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
         if project:
             project.status = status
             session.commit()
@@ -168,235 +152,207 @@ def _update_project_status(project_id: str, status: str) -> None:
         session.close()
 
 
-def _validate_selections(
-    selections: dict,
-    min_length_sec: int,
-    max_length_sec: int,
-    total_duration: float,
-) -> list[dict]:
-    """
-    Validate and clean up LLM selection output.
-
-    Ensures:
-    - All required fields are present
-    - start_sec < end_sec
-    - Clip duration is within bounds
-    - Clips don't exceed source duration
-    - Scores are 0.0-1.0
-    - Clips are sorted by score descending
-    """
-    clips = selections.get("clips", [])
-    valid_clips = []
-
-    for clip in clips:
-        try:
-            start = float(clip.get("start_sec", 0))
-            end = float(clip.get("end_sec", 0))
-            score = float(clip.get("score", 0))
-            reasoning = str(clip.get("reasoning", "No reasoning provided"))
-
-            # Validate bounds
-            if start >= end:
-                logger.warning(f"Skipping clip: start ({start}) >= end ({end})")
-                continue
-
-            duration = end - start
-            if duration < min_length_sec or duration > max_length_sec:
-                logger.warning(f"Skipping clip: duration {duration:.1f}s outside [{min_length_sec}, {max_length_sec}]")
-                continue
-
-            if end > total_duration + 1:  # 1s tolerance
-                logger.warning(f"Skipping clip: end ({end}) exceeds duration ({total_duration})")
-                continue
-
-            # Clamp score
-            score = max(0.0, min(1.0, score))
-
-            valid_clips.append(
-                {
-                    "start_sec": round(start, 3),
-                    "end_sec": round(end, 3),
-                    "score": round(score, 3),
-                    "reasoning": reasoning,
-                }
-            )
-
-        except (ValueError, TypeError) as e:
-            logger.warning(f"Skipping invalid clip entry: {e}")
-            continue
-
-    # Sort by score descending
-    valid_clips.sort(key=lambda c: c["score"], reverse=True)
-
-    return valid_clips
-
-
-async def select_clips(
-    transcript_path: str,
-    campaign_brief: dict,
-    clip_count: int,
-    min_length_sec: int,
-    max_length_sec: int,
+@celery_app.task(
+    name="clipforge_core.workers.select.select_clips",
+    queue="llm",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=15,
+)
+def select_clips(
+    self,
+    project_id: str,
+    clip_count: int = 5,
+    min_length_sec: int = 20,
+    max_length_sec: int = 60,
     custom_prompt: str | None = None,
     time_range_start: float | None = None,
     time_range_end: float | None = None,
-) -> dict:
+) -> Dict[str, Any]:
     """
-    Use LLM to select highlight segments from transcript.
-
-    Args:
-        transcript_path: Path to transcript.json
-        campaign_brief: Campaign brief dict (tone, required mentions, etc.)
-        clip_count: Number of clips to select
-        min_length_sec: Minimum clip duration
-        max_length_sec: Maximum clip duration
-
-    Returns:
-        dict with validated clips and metadata
+    Candidate selection task running on the 'llm' queue.
     """
-    # Load transcript
-    transcript_file = Path(transcript_path)
-    if not transcript_file.exists():
-        raise FileNotFoundError(f"Transcript not found: {transcript_path}")
+    logger.info(f"[LLM Select] Starting candidate selection for project {project_id}")
+    _update_job_status(project_id, "running")
+    _update_project_status(project_id, "selecting")
 
-    transcript = json.loads(transcript_file.read_text(encoding="utf-8"))
+    project_dir = Path(settings.MEDIA_DIR) / project_id
+    transcript_path = project_dir / "transcript.json"
+    analysis_path = project_dir / "analysis.json"
 
+    if not transcript_path.exists() and not analysis_path.exists():
+        error_msg = f"Transcript missing for project {project_id}"
+        _update_job_status(project_id, "failed", error_message=error_msg)
+        _update_project_status(project_id, "failed")
+        raise FileNotFoundError(error_msg)
+
+    # Load transcript & scenes
+    if analysis_path.exists():
+        analysis_data = json.loads(analysis_path.read_text(encoding="utf-8"))
+        transcript = analysis_data.get("transcript", {})
+        scenes = analysis_data.get("scenes", [])
+    else:
+        transcript = json.loads(transcript_path.read_text(encoding="utf-8"))
+        scenes = []
+
+    # Fetch Project & Brief from DB
+    session = get_sync_session()
+    try:
+        project = session.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
+        if not project:
+            raise ValueError(f"Project not found: {project_id}")
+
+        editorial_template = project.editorial_template or "explainer"
+        rights_basis = project.rights_basis or "owned"
+        campaign_brief = project.campaign_brief.brief_json if project.campaign_brief else {}
+    finally:
+        session.close()
+
+    # Filter transcript by time range if requested
     if time_range_start is not None or time_range_end is not None:
-        start = time_range_start or 0.0
-        end = time_range_end or transcript.get("duration_sec", 999999)
-        transcript["segments"] = [
-            seg for seg in transcript.get("segments", []) if seg["end"] >= start and seg["start"] <= end
+        t_start = time_range_start or 0.0
+        t_end = time_range_end or float("inf")
+        filtered_segs = [
+            s for s in transcript.get("segments", [])
+            if s.get("start", 0.0) >= t_start and s.get("end", 0.0) <= t_end
         ]
-
-    total_duration = transcript.get("duration_sec", 0)
+        transcript["segments"] = filtered_segs
 
     # Build prompt
     prompt = _build_selection_prompt(
         transcript=transcript,
+        scenes=scenes,
         campaign_brief=campaign_brief,
+        editorial_template=editorial_template,
+        rights_basis=rights_basis,
         clip_count=clip_count,
         min_length_sec=min_length_sec,
         max_length_sec=max_length_sec,
         custom_prompt=custom_prompt,
     )
 
-    logger.info(f"Requesting {clip_count} clips ({min_length_sec}-{max_length_sec}s) from {total_duration:.1f}s source")
-
-    # Call LLM for structured JSON response
-    raw_response = await llm_client.complete_json(
-        prompt=prompt,
-        system=SELECTION_SYSTEM_PROMPT,
-        temperature=0.1,
-        max_tokens=4096,
-    )
-
-    # Validate and clean up selections
-    valid_clips = _validate_selections(
-        selections=raw_response,
-        min_length_sec=min_length_sec,
-        max_length_sec=max_length_sec,
-        total_duration=total_duration,
-    )
-
-    # Trim to requested count
-    if len(valid_clips) > clip_count:
-        valid_clips = valid_clips[:clip_count]
-
-    result = {
-        "clips": valid_clips,
-        "total_found": len(valid_clips),
-        "requested": clip_count,
-        "source_duration_sec": total_duration,
-        "llm_notes": raw_response.get("notes", ""),
-    }
-
-    # Save selections to disk
-    output_path = transcript_file.parent / "selections.json"
-    output_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    logger.info(f"Selected {len(valid_clips)}/{clip_count} clips")
-
-    return result
-
-
-@celery_app.task(
-    name="app.workers.select.select_highlights",
-    queue="select",
-    bind=True,
-    max_retries=3,
-    default_retry_delay=30,
-)
-def select_highlights(
-    self,
-    project_id: str,
-    transcript_path: str,
-    campaign_brief: dict,
-    clip_count: int,
-    min_length_sec: int,
-    max_length_sec: int,
-) -> dict:
-    """
-    Select highlight clips from transcript using LLM.
-
-    This is a sync Celery task that wraps the async LLM call.
-
-    Updates jobs table with granular status:
-        pending -> running -> success/failed/retrying
-    """
-    import asyncio
-
-    logger.info(f"[Select] Starting for project {project_id}")
-
-    _update_job_status(project_id, "running")
-    _update_project_status(project_id, "selecting")
-
     try:
-        # Run the async function in a new event loop
-        result = asyncio.run(
-            select_clips(
-                transcript_path=transcript_path,
-                campaign_brief=campaign_brief,
-                clip_count=clip_count,
-                min_length_sec=min_length_sec,
-                max_length_sec=max_length_sec,
+        # Run async LLM completion in event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            response_json = loop.run_until_complete(
+                llm_client.complete_json(
+                    prompt=prompt,
+                    system=SELECTION_SYSTEM_PROMPT,
+                    temperature=0.2,
+                )
             )
+        finally:
+            loop.close()
+
+        raw_clips: List[Dict[str, Any]] = (
+            response_json.get("clips", []) if isinstance(response_json, dict) else response_json
         )
 
-        result["project_id"] = project_id
+        total_source_dur = transcript.get("duration_sec", 60.0)
+
+        # Compute transformation score and enrich candidates
+        enriched_candidates = []
+        for raw in raw_clips:
+            start_s = float(raw.get("start_sec", 0.0))
+            end_s = float(raw.get("end_sec", start_s + min_length_sec))
+            duration = end_s - start_s
+
+            t_score_data = calculate_transformation_score(
+                clip_duration_sec=duration,
+                total_source_duration_sec=total_source_dur,
+                has_commentary=True,
+                editorial_template=editorial_template,
+                callout_count=len(raw.get("suggested_callouts", [])),
+                has_hook=bool(raw.get("hook_text")),
+                has_takeaway=bool(raw.get("key_takeaway")),
+            )
+
+            cand = {
+                "start_sec": round(start_s, 2),
+                "end_sec": round(end_s, 2),
+                "title": raw.get("title", f"Clip @ {int(start_s)}s"),
+                "hook_type": raw.get("hook_type", "bold_statement"),
+                "hook_text": raw.get("hook_text", ""),
+                "key_takeaway": raw.get("key_takeaway", ""),
+                "virality_score": round(float(raw.get("virality_score", raw.get("score", 0.75))), 2),
+                "transformation_score": t_score_data["score"],
+                "transformation_breakdown": t_score_data["breakdown"],
+                "transformation_band": t_score_data["band"],
+                "reasoning": raw.get("reasoning", "Strong highlight candidate matching editorial template"),
+                "suggested_callouts": raw.get("suggested_callouts", []),
+            }
+            enriched_candidates.append(cand)
+
+        # Snap to scene cut boundaries and deduplicate
+        final_clips = deduplicate_and_rank_candidates(enriched_candidates, scenes=scenes)
+
+        # Limit to requested clip count
+        final_clips = final_clips[:clip_count]
+
+        # Save selections.json to disk
+        selections_path = project_dir / "selections.json"
+        selections_payload = {
+            "project_id": project_id,
+            "clips": final_clips,
+            "total_selected": len(final_clips),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        selections_path.write_text(json.dumps(selections_payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+        # Persist Clip records in DB
+        db_session = get_sync_session()
+        try:
+            pid = uuid.UUID(project_id)
+            for c in final_clips:
+                clip_record = Clip(
+                    id=uuid.uuid4(),
+                    project_id=pid,
+                    start_sec=c["start_sec"],
+                    end_sec=c["end_sec"],
+                    score=c["virality_score"],
+                    transformation_score=c["transformation_score"],
+                    transformation_breakdown=c["transformation_breakdown"],
+                    reasoning=f"[{c['hook_type']}] {c['title']} — {c['reasoning']}",
+                    review_status="pending",
+                )
+                db_session.add(clip_record)
+
+            # Record audit event
+            audit = ProjectAuditEvent(
+                id=uuid.uuid4(),
+                project_id=pid,
+                event_type="candidates_selected",
+                payload={
+                    "candidate_count": len(final_clips),
+                    "avg_transformation_score": round(
+                        sum(c["transformation_score"] for c in final_clips) / len(final_clips), 1
+                    ) if final_clips else 0,
+                },
+            )
+            db_session.add(audit)
+            db_session.commit()
+        except Exception as e:
+            logger.error(f"Failed to record clips in DB: {e}")
+            db_session.rollback()
+        finally:
+            db_session.close()
 
         _update_job_status(project_id, "success")
-        logger.info(
-            f"[Select] Complete for project {project_id}: {result['total_found']}/{result['requested']} clips selected"
-        )
-
-        return result
+        logger.info(f"[LLM Select] Selected {len(final_clips)} clips for project {project_id}")
+        return selections_payload
 
     except LLMClientError as e:
-        error_msg = str(e.message)
-        logger.error(f"[Select] LLM error for project {project_id}: {error_msg}")
-
-        if e.provider_info:
-            error_msg += f" (Provider: {e.provider_info})"
-
-        if e.retryable and self.request.retries < self.max_retries:
-            _update_job_status(project_id, "retrying", error_message=error_msg)
-            raise self.retry(exc=e)
-        else:
-            _update_job_status(project_id, "failed", error_message=error_msg)
-            _update_project_status(project_id, "failed")
-            raise
-
-    except FileNotFoundError as e:
-        error_msg = str(e)
-        logger.error(f"[Select] Failed for project {project_id}: {error_msg}")
+        error_msg = f"LLM Gateway error: {e.message}"
+        logger.error(f"[LLM Select] {error_msg}")
         _update_job_status(project_id, "failed", error_message=error_msg)
         _update_project_status(project_id, "failed")
         raise
 
     except Exception as e:
-        error_msg = f"Selection error: {e}"
-        logger.error(f"[Select] Error for project {project_id}: {error_msg}")
-
+        error_msg = f"Candidate selection error: {e}"
+        logger.error(f"[LLM Select] {error_msg}")
         if self.request.retries < self.max_retries:
             _update_job_status(project_id, "retrying", error_message=error_msg)
             raise self.retry(exc=e)
