@@ -23,15 +23,17 @@
    - Verified Python imports and Celery task registration (all 9 tasks detected).
    - Created `infra/docker-compose.yml` with Postgres 16, Redis 7, and MinIO S3-compatible storage.
    - Kept original `frontend/` and `backend/` completely untouched for safe rollback.
-9. **Phase 1, Task 2 (Configure Workspaces) complete:**
-   - Configured root and package-level `package.json` scripts (`dev`, `build`, `typecheck`, `lint`).
-   - Configured `packages/contracts` build (`tsc` targeting `dist/` with declaration maps).
-   - Configured root `pyproject.toml` with `pytest`, `pytest-asyncio`, and `ruff` workspace linting rules.
-   - Fixed all workspace ruff linter checks (0 errors).
-   - Created comprehensive root and service-level `.env.example` templates covering DB, Redis, MinIO/S3, LLM Gateway, TTS, and ports.
-   - Created `start-v2.bat` for one-click launching of the v2 monorepo services while keeping `start.bat` functional for v1.
-   - Verified `pnpm run build` and `pnpm run typecheck` across all workspace projects (0 errors).
+9. **Phase 1 (Foundation and Local Development) — 100% COMPLETE:**
+   - **Task 1.1 (Monorepo Layout):** Initialized `apps/web`, `apps/api`, `apps/worker`, `packages/contracts`, `packages/python-core`, and `infra`.
+   - **Task 1.2 (Workspaces):** Configured `pnpm-workspace.yaml`, root `package.json`, and root `pyproject.toml` (uv workspace).
+   - **Task 1.3 (Docker Compose):** Built multi-stage Dockerfiles (`apps/api/Dockerfile`, `apps/worker/Dockerfile`, `apps/web/Dockerfile`) and unified `infra/docker-compose.yml` with Postgres 16, Redis 7, MinIO, API, and Worker.
+   - **Task 1.4 (Design Tokens):** Implemented dark-studio design tokens in `globals.css` per Section 6.3 (`--surface`, `--surface-raised`, `--primary-hover`, etc.).
+   - **Task 1.5 (API & Observability):** Configured structured logging, request duration tracking middleware, `/health` and `/ready` probes with passing pytest test suite.
+   - **Task 1.6 (Alembic):** Configured async Alembic migration runner (`alembic.ini`, `env.py`, initial revision `001_initial.py`) with verified static SQL generation.
+   - **Task 1.7 (Worker Queues):** Configured 6 v2 named Celery queues (`ingest`, `analysis`, `llm`, `editorial`, `render`, `qa`) plus no-op verification task with passing unit tests.
+   - **Task 1.8 (Tracking & Templates):** Created complete `.env.example` templates, `start-v2.bat`, and rewritten `DEPLOYMENT.md`.
 
-## Next Step
-- **Awaiting founder approval of Phase 1, Task 2.**
-- Next task: **Phase 1, Task 3 — Add Docker Compose: Postgres 16, Redis 7, MinIO, API, worker** (complete containerized orchestration).
+## Next Session / Immediate Next Step
+- **Phase 2 — Source Ingestion and Analysis**
+  - Next Task: **Implement project creation with mandatory rights declaration (Section 2.2).**
+  - *Note:* Per ADR-007, founder can provide hardware specs (RAM, CPU, GPU/VRAM) before starting Phase 2 AI worker tuning.

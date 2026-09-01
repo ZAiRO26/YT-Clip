@@ -1,80 +1,121 @@
-# ClipForge AI — Deployment Guide
+# ClipForge AI — v2 Monorepo Deployment Guide
 
-This guide covers how to deploy the ClipForge pipeline on a home server or VPS for production use.
+This guide covers local development, multi-container Docker Compose orchestration, and production deployment for ClipForge AI v2.
 
-## 1. System Requirements
-The ClipForge backend utilizes heavy multimedia tools. The host server must have:
-- **FFmpeg**: Must be installed globally and accessible in the system PATH.
-- **Python 3.11+**: We recommend using `uv` for dependency management.
-- **GPU (Optional but highly recommended)**: `faster-whisper` and the `ClipsAI` cropper perform best with an NVIDIA GPU and CUDA toolkit installed.
-- **Node.js 20+**: Required for the Next.js frontend.
+---
 
-## 2. Environment Variables
+## 1. Monorepo Architecture Overview
 
-Create a `.env` file in the root directory based on `.env.example`. 
-
-**Critical Variables:**
-- `DATABASE_URL`: Your Postgres connection string (e.g., `postgresql+asyncpg://postgres:postgres@localhost:5432/clipforge`).
-- `DATABASE_URL_SYNC`: The synchronous version for Celery (e.g., `postgresql://postgres:postgres@localhost:5432/clipforge`).
-- `REDIS_URL`: Connection string for the Celery message broker (e.g., `redis://localhost:6379/0`).
-- `NEXT_PUBLIC_API_URL`: The public URL where your backend is hosted (e.g., `http://your-server-ip:8000`).
-
-## 3. Production Docker Compose
-
-We recommend running your data layer (Postgres + Redis) in Docker, while running the Backend and Frontend directly on the host to easily access hardware acceleration (CUDA) and system binaries (FFmpeg).
-
-Create a `docker-compose.yml` (or use the one in the repo):
-```yaml
-services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: your_secure_password
-      POSTGRES_DB: clipforge
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redisdata:/data
-
-volumes:
-  pgdata:
-  redisdata:
 ```
-Run `docker compose up -d` to start the data layer.
+Clip-Forge/
+├── apps/
+│   ├── web/                    # Next.js 16 + Tailwind + shadcn/ui
+│   ├── api/                    # FastAPI HTTP server (/health, /ready, routes)
+│   └── worker/                 # Celery worker process
+├── packages/
+│   ├── contracts/              # Shared TypeScript types & schemas
+│   └── python-core/            # Shared Python models, services, pipeline, workers
+├── infra/
+│   ├── docker-compose.yml      # Postgres 16, Redis 7, MinIO, API, Worker
+│   └── .env.example
+├── docs/                       # PRODUCT_POLICY, DECISIONS, RENDER_MANIFEST_SCHEMA
+└── start-v2.bat                # 1-click Windows startup script
+```
 
-## 4. Starting the Services
+---
 
-### Start the FastAPI Backend
-In a `tmux` session or via `systemd`, navigate to the `backend/` directory and run:
+## 2. Local Development (Fastest Workflow)
+
+### Prerequisites
+- **Node.js 20+** and **pnpm 11+**
+- **Python 3.11+** and **uv 0.11+**
+- **Docker** (for Postgres, Redis, MinIO)
+- **FFmpeg** installed globally in system PATH
+
+### Step 1: Clone & Setup Workspaces
 ```bash
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+# 1. Install Node dependencies across monorepo
+pnpm install
+
+# 2. Sync Python workspace dependencies
+uv sync --all-packages
+
+# 3. Create .env file
+cp .env.example .env
 ```
 
-### Start the Celery Workers
-The backend orchestration relies heavily on Celery. Start the workers with the correct queues:
+### Step 2: Start Infrastructure
 ```bash
-uv run celery -A app.celery_app worker -Q default,download,transcribe,select,crop,caption -c 2 --loglevel=info --include=app.services.pipeline
+# Start Postgres, Redis, and MinIO
+docker compose -f infra/docker-compose.yml up -d postgres redis minio
 ```
 
-### Start the Frontend
-Navigate to the `frontend/` directory, build the app, and start it:
+### Step 3: Run Database Migrations
 ```bash
-npm install
-npm run build
-npm run start -p 3000
+uv run alembic -c packages/python-core/alembic.ini upgrade head
 ```
 
-## 5. Connecting the LLM Gateway
-Once deployed, navigate to the **Settings** page in the ClipForge UI to configure your LLM Base URL.
-If you are running **OmniRoute** or **FreeLLMAPI** on the same server, you can set the Base URL to `http://localhost:8080/v1` or the appropriate server IP. 
-*Note: These settings are safely stored in the Postgres database.*
+### Step 4: Start Services
+Option A — 1-Click Script (Windows):
+```cmd
+start-v2.bat
+```
+
+Option B — Manual Terminal Windows:
+```bash
+# Terminal 1: FastAPI
+set PYTHONPATH=apps/api;packages/python-core
+uv run uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --port 8000 --reload
+
+# Terminal 2: Celery Worker
+set PYTHONPATH=apps/worker;packages/python-core
+uv run celery -A app.celery_app worker -Q ingest,analysis,llm,editorial,render,qa,default -c 2 -P solo --loglevel=info
+
+# Terminal 3: Next.js Frontend
+pnpm dev
+```
+
+---
+
+## 3. Full Multi-Container Docker Deployment
+
+To run the entire stack (Database, Cache, Object Storage, API, Worker) inside Docker:
+
+```bash
+docker compose -f infra/docker-compose.yml up --build -d
+```
+
+### Service Endpoints
+| Service | URL | Purpose |
+|---|---|---|
+| Web UI | `http://localhost:3000` | Next.js dark studio dashboard |
+| API | `http://localhost:8000` | FastAPI REST server |
+| API Health | `http://localhost:8000/health` | Liveness check |
+| API Ready | `http://localhost:8000/ready` | DB, Redis, and Storage readiness probe |
+| MinIO Console | `http://localhost:9001` | S3 browser UI (user: `minioadmin`, pass: `minioadmin`) |
+| MinIO S3 API | `http://localhost:9000` | S3 object storage |
+
+---
+
+## 4. Named Worker Queues
+
+The Celery worker pool uses dedicated queues per pipeline stage:
+
+| Queue | Handled Tasks |
+|---|---|
+| `ingest` | Video download, URL validation, ffprobe probing |
+| `analysis` | faster-whisper transcription, scene cuts, face tracking |
+| `llm` | Brief-aware candidate selection, script drafts |
+| `editorial` | Caption preparation, hook cards, transformation scoring |
+| `render` | FFmpeg cut/crop, 9:16 reframe, motion effects, audio mix |
+| `qa` | Technical QC, aspect ratio, loudness validation |
+| `default` | General background jobs & no-op health tasks |
+
+---
+
+## 5. Connecting LLM Gateway
+
+ClipForge AI uses zero-cost local/proxy LLM inference via OpenAI-compatible endpoints:
+1. Open the UI at `http://localhost:3000/settings`.
+2. Enter your OmniRoute or FreeLLMAPI gateway URL (default: `http://localhost:8080/v1`).
+3. Settings are persisted directly to the Postgres database.

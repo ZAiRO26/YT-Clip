@@ -14,7 +14,7 @@
 - [x] Configure FastAPI, structured logging, `/health`, `/ready`.
 - [x] Configure Alembic migrations.
 - [x] Configure Celery named queues (ingest, analysis, llm, editorial, render, qa) and no-op worker test.
-- [ ] Add environment templates and repository tracking files.
+- [x] Add environment templates and repository tracking files.
 
 ## Phase 2 — Source Ingestion and Analysis
 - [ ] Implement project creation with mandatory rights declaration (Section 2.2).
