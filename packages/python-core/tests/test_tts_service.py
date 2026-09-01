@@ -1,4 +1,3 @@
-from pathlib import Path
 from clipforge_core.services.tts_service import VOICE_PERSONAS, synthesize_voiceover
 
 
@@ -21,5 +20,6 @@ def test_synthesize_voiceover_audio_file(tmp_path):
         voice_id="en-US-JennyNeural",
         output_path=out_mp3,
     )
+    assert res["output_path"] == str(out_mp3)
     assert out_mp3.exists()
     assert out_mp3.stat().st_size > 500

@@ -2,8 +2,8 @@
 ClipForge AI — Royalty-Free Background Music Studio (v2)
 Provides ambient background music beds with auto-ducking mixing profiles.
 """
-from pathlib import Path
 import subprocess
+from pathlib import Path
 from typing import Any, Dict, List
 
 MUSIC_TRACKS: List[Dict[str, Any]] = [
