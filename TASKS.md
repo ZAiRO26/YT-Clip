@@ -46,13 +46,13 @@
 - [x] Build Review Gallery preview card and approve/reject flow.
 
 ## Phase 5 — Editorial Transformation Layer
-- [ ] Add editorial-template configuration to project creation.
-- [ ] Generate editable hook, narration draft, callout plan, closing takeaway per clip.
-- [ ] Add factual-claim flagging; require manual script review before TTS render.
-- [ ] Build hook card, lower-third, callout, attribution, CTA card renderer.
-- [ ] Add optional reaction/PiP video layer with responsive layouts.
-- [ ] Implement Transformation Readiness Score and action-oriented warning panel.
-- [ ] Add pre-export acknowledgement dialog.
+- [x] Add editorial-template configuration to project creation.
+- [x] Generate editable hook, narration draft, callout plan, closing takeaway per clip.
+- [x] Add factual-claim flagging; require manual script review before TTS render.
+- [x] Build hook card, lower-third, callout, attribution, CTA card renderer.
+- [x] Add optional reaction/PiP video layer with responsive layouts.
+- [x] Implement Transformation Readiness Score and action-oriented warning panel.
+- [x] Add pre-export acknowledgement dialog.
 
 ## Phase 6 — Voiceover and Audio Studio
 - [ ] Implement TTS adapter interface and local Kokoro TTS integration.

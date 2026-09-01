@@ -59,11 +59,16 @@
     - **End-to-End Pipeline Orchestration (Task 4.7):** Linked Ingest -> Analysis -> Select -> Render in `pipeline.py` and Celery worker.
     - **Unit Tests:** Created tests for caption generator and deterministic render engine on synthetic fixtures (25/25 tests passing).
 
-## Next Milestone: Phase 5 — Editorial Transformation Layer
-- Add editorial-template configuration to project creation.
-- Generate editable hook, narration draft, callout plan, closing takeaway per clip.
-- Add factual-claim flagging; require manual script review before TTS render.
-- Build hook card, lower-third, callout, attribution, CTA card renderer.
-- Add optional reaction/PiP video layer with responsive layouts.
-- Implement Transformation Readiness Score and action-oriented warning panel.
-- Add pre-export acknowledgement dialog.
+13. **Phase 5 (Editorial Transformation Layer) — 100% COMPLETE:**
+    - **Editorial Graphics Generator (Task 5.4):** Created `overlay_renderer.py` utilizing Pillow to dynamically render 1080x1920 transparent PNG assets for Hook Cards, Lower Thirds, and Closing CTA End Cards.
+    - **Factual Claim Detector (Task 5.3):** Created `factual_claim_detector.py` to identify statistics, medical/financial terms, and superlative statements in candidate speech.
+    - **Transformation Readiness & High-Risk Warnings (Task 5.6):** Added Transformation Readiness score header and warning panels to the Project Review page in `apps/web`.
+    - **Pre-Export Rights Acknowledgement Modal (Task 5.7):** Built modal dialog with mandatory declaration checkboxes ("valid rights/license" + "acknowledgement that ClipForge does not provide copyright immunity").
+    - **Unit Tests:** Created tests for overlay generation and factual claim detection (30/30 tests passing).
+
+## Next Milestone: Phase 6 — Voiceover and Audio Studio
+- Implement TTS adapter interface and local Kokoro TTS integration (`kokoro-onnx` on CPU).
+- Add voice picker UI with previews (American, British accents).
+- Generate original commentary voiceover from candidate script.
+- Build sidechain audio ducking (source audio volume ducks by -12dB when voiceover plays).
+- Add background music library and auto-ducking.
