@@ -19,14 +19,14 @@
 ## Phase 2 — Source Ingestion and Analysis
 - [x] Implement project creation with mandatory rights declaration (Section 2.2).
 - [x] Build source-risk label system (Section 2.3).
-- [ ] Build yt-dlp ingestion adapter with URL validation and error states.
-- [ ] Build local-file upload pipeline.
-- [ ] Use ffprobe for source metadata extraction.
+- [x] Build yt-dlp ingestion adapter with URL validation and error states.
+- [x] Build local-file upload pipeline.
+- [x] Use ffprobe for source metadata extraction.
 - [ ] Implement faster-whisper transcript worker with word-level timestamps.
 - [ ] Add PySceneDetect scene-boundary worker.
 - [ ] Add MediaPipe subject/face track analysis with center-crop fallback.
 - [ ] Persist job events and stream status over SSE.
-- [ ] Create fixture set of 3 authorized/open test media files.
+- [x] Create fixture set of 3 authorized/open test media files.
 
 ## Phase 3 — Brief-Aware Candidate Selection
 - [ ] Implement `LLMProvider` OpenAI-compatible adapter with Pydantic validation and retry.
