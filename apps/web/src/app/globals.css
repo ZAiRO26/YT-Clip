@@ -47,51 +47,45 @@
   --radius-3xl: 28px;
   --radius-4xl: 32px;
 
-  /* ClipForge brand tokens from UI/UX Brief */
-  --color-cf-primary: #6366F1;
-  --color-cf-secondary: #1E1E24;
-  --color-cf-accent: #F97316;
-  --color-cf-success: #22C55E;
-  --color-cf-warn: #F59E0B;
-  --color-cf-error: #EF4444;
+  /* ClipForge brand tokens from context2-upgrade.md Section 6.3 */
   --color-cf-bg: #0B0B0F;
+  --color-cf-surface: #15151C;
+  --color-cf-surface-raised: #1E1E27;
+  --color-cf-border: #2B2B36;
   --color-cf-text: #F5F5F7;
   --color-cf-muted: #9CA3AF;
+  --color-cf-primary: #6366F1;
+  --color-cf-primary-hover: #818CF8;
+  --color-cf-accent: #F97316;
+  --color-cf-success: #22C55E;
+  --color-cf-warning: #F59E0B;
+  --color-cf-danger: #EF4444;
 }
 
 /*
- * ClipForge AI — Dark-mode native design system
- * Brand: professional, efficient, dark-mode-native
- * Inspiration: OpusClip, Whop dashboard, Linear
- *
- * Colour tokens from UI/UX Brief section 04:
- *   primary: #6366F1 (indigo)
- *   secondary: #1E1E24
- *   accent: #F97316 (orange)
- *   bg: #0B0B0F
- *   text: #F5F5F7
- *   muted: #9CA3AF
+ * ClipForge AI — v2 Dark-Studio Design Tokens (Section 6.3)
  */
-
 :root {
-  /* ClipForge is dark-mode-native — dark values are the defaults */
   --background: #0B0B0F;
+  --surface: #15151C;
+  --surface-raised: #1E1E27;
   --foreground: #F5F5F7;
-  --card: #1E1E24;
+  --card: #15151C;
   --card-foreground: #F5F5F7;
-  --popover: #1E1E24;
+  --popover: #1E1E27;
   --popover-foreground: #F5F5F7;
   --primary: #6366F1;
+  --primary-hover: #818CF8;
   --primary-foreground: #FFFFFF;
-  --secondary: #1E1E24;
+  --secondary: #1E1E27;
   --secondary-foreground: #F5F5F7;
-  --muted: #1E1E24;
+  --muted: #15151C;
   --muted-foreground: #9CA3AF;
   --accent: #F97316;
   --accent-foreground: #FFFFFF;
   --destructive: #EF4444;
-  --border: rgba(255, 255, 255, 0.1);
-  --input: rgba(255, 255, 255, 0.12);
+  --border: #2B2B36;
+  --input: #2B2B36;
   --ring: #6366F1;
   --chart-1: #6366F1;
   --chart-2: #F97316;
@@ -99,13 +93,16 @@
   --chart-4: #F59E0B;
   --chart-5: #EF4444;
   --radius: 10px;
-  --sidebar: #0F0F14;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --sidebar: #0B0B0F;
   --sidebar-foreground: #F5F5F7;
   --sidebar-primary: #6366F1;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #1E1E24;
+  --sidebar-accent: #1E1E27;
   --sidebar-accent-foreground: #F5F5F7;
-  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-border: #2B2B36;
   --sidebar-ring: #6366F1;
 }
 

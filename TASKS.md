@@ -10,7 +10,7 @@
 - [x] Initialize monorepo: `apps/web`, `apps/api`, `apps/worker`, `packages/contracts`, `packages/python-core`, `infra`.
 - [x] Configure pnpm workspace and uv Python workspace.
 - [x] Add Docker Compose: Postgres 16, Redis 7, MinIO, API, worker.
-- [ ] Configure Next.js + Tailwind + shadcn/ui (stable) + v2 design tokens.
+- [x] Configure Next.js + Tailwind + shadcn/ui (stable) + v2 design tokens.
 - [ ] Configure FastAPI, structured logging, `/health`, `/ready`.
 - [ ] Configure Alembic migrations.
 - [ ] Configure Celery named queues (ingest, analysis, llm, editorial, render, qa) and no-op worker test.
