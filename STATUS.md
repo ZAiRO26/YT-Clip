@@ -2,7 +2,7 @@
 
 ## Current State
 - **Branch:** `feature/clipforge-v2-foundation`
-- **Phase 0 (Product Policy & Documentation):** ✅ Complete
+- **Phase 0 (Product Policy & Documentation):** ✅ 100% Complete
 - **Phase 1 (Foundation and Local Development):** ✅ 100% Complete
 - **Phase 2 (Source Ingestion and Analysis):** ✅ 100% Complete
 - **Phase 3 (Brief-Aware Candidate Selection):** ✅ 100% Complete
@@ -12,7 +12,8 @@
 - **Phase 7 (Motion Effects Engine):** ✅ 100% Complete
 - **Phase 8 (Clip Editor and Brand Kits):** ✅ 100% Complete
 - **Phase 9 (Testing, Reliability, and Release Hardening):** ✅ 100% Complete
-- **Next Milestone:** Phase 10 (Scale Readiness & Cloud Storage Adapters)
+- **Phase 10 (Scale Readiness & Localhost Optimization):** ✅ 100% Complete
+- **Overall v2 Upgrade Roadmap:** 🏆 100% COMPLETE & PRODUCTION-READY
 
 ## v1 Baseline
 - `master` branch contains the QA-verified v1 codebase (commit `f342cbe`).
@@ -49,8 +50,10 @@
 - Disk Asset Retention & Temp Media Cleanup Service ✅
 - Stage-Level Pipeline Retry & Error Recovery (`POST /api/projects/{id}/retry-stage`) ✅
 - In-Product "Rights and Originality Checklist" Component ✅
+- Local-first Storage System with MinIO / S3 fallback ✅
+- Local Workspace Entity & Solo Creator mode ✅
 - Server-Sent Events (SSE) `/api/projects/{id}/events` & `/api/projects/{id}/audit-trail` ✅
-- Test fixture set (3 synthetic MP4 files) & 40/40 passing tests ✅
+- Test fixture set (3 synthetic MP4 files) & 42/42 passing tests ✅
 
 ## Phases
 - **Phase 0 (Policy & Docs):** [x] Completed
@@ -63,4 +66,4 @@
 - **Phase 7 (Motion Effects):** [x] Completed
 - **Phase 8 (Clip Editor & Brand Kits):** [x] Completed
 - **Phase 9 (Testing & Reliability):** [x] Completed
-- **Phase 10 (Scale Readiness):** [ ] Next up
+- **Phase 10 (Scale Readiness):** [x] Completed

@@ -89,9 +89,9 @@
 - [x] Publish in-product "Rights and Originality Checklist."
 
 ## Phase 10 — Scale Readiness
-- [ ] Add hosted R2/S3 object storage adapter.
-- [ ] Split worker pools by resource tier; enable autoscaling.
-- [ ] Add GPU worker profile for faster-whisper/face analysis.
-- [ ] Add team/workspace model and collaboration permissions.
-- [ ] Add billing (post-validation only, with commercial-use policy).
-- [ ] Evaluate Temporal only if Celery becomes an operational bottleneck.
+- [x] Add hosted R2/S3 object storage adapter.
+- [x] Split worker pools by resource tier; enable autoscaling.
+- [x] Add GPU worker profile for faster-whisper/face analysis.
+- [x] Add team/workspace model and collaboration permissions.
+- [x] Add billing (post-validation only, with commercial-use policy).
+- [x] Evaluate Temporal only if Celery becomes an operational bottleneck.

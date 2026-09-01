@@ -193,3 +193,14 @@ class BrandKit(Base):
     default_cta_text = Column(Text, nullable=False, server_default=text("'Subscribe for more'"))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
+
+class Workspace(Base):
+    __tablename__ = "workspaces"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(Text, nullable=False, server_default=text("'Local Workspace (Solo Creator)'"))
+    mode = Column(Text, nullable=False, server_default=text("'local_first'"))
+    tier = Column(Text, nullable=False, server_default=text("'free_studio'"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+
