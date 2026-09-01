@@ -1,10 +1,9 @@
 import pytest
-from pydantic import ValidationError
-
 from clipforge_core.schemas import (
     ProjectCreate,
     compute_source_risk,
 )
+from pydantic import ValidationError
 
 
 def test_compute_source_risk_owned():

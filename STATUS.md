@@ -4,7 +4,8 @@
 - **Branch:** `feature/clipforge-v2-foundation`
 - **Phase 0 (Product Policy & Documentation):** ✅ Complete
 - **Phase 1 (Foundation and Local Development):** ✅ 100% Complete
-- **Next Milestone:** Phase 2 (Source Ingestion and Analysis)
+- **Phase 2 (Source Ingestion and Analysis):** ✅ 100% Complete
+- **Next Milestone:** Phase 3 (Brief-Aware Candidate Selection & Transformation Scoring)
 
 ## v1 Baseline
 - `master` branch contains the QA-verified v1 codebase (commit `f342cbe`).
@@ -14,22 +15,23 @@
 ## v2 Upgrade Status
 - Product specification: `DOC/context2-upgrade.md` (source of truth)
 - Product policy: `docs/PRODUCT_POLICY.md` ✅
-- Architecture decisions: `docs/DECISIONS.md` ✅
+- Architecture decisions: `docs/DECISIONS.md` (ADR-001 through ADR-010 updated with AMD Ryzen 7 + 32GB RAM profile) ✅
 - Render manifest schema: `docs/RENDER_MANIFEST_SCHEMA.json` ✅
 - Master task list: `TASKS.md` ✅
 - Monorepo structure (`apps/web`, `apps/api`, `apps/worker`, `packages/contracts`, `packages/python-core`, `infra`) ✅
-- Workspaces (`pnpm-workspace.yaml`, root `package.json`, root `pyproject.toml`) ✅
-- Docker Compose (`infra/docker-compose.yml` with Postgres 16, Redis 7, MinIO, API, Worker, Web) ✅
-- Next.js 16 + Tailwind + shadcn/ui + v2 design tokens ✅
-- FastAPI structured logging, request timing, `/health`, `/ready` endpoints ✅
-- Alembic async migration runner (`alembic.ini`, `env.py`, `001_initial.py`) ✅
-- Celery named queues (`ingest`, `analysis`, `llm`, `editorial`, `render`, `qa`) & no-op test ✅
-- Deployment guide & startup scripts (`start-v2.bat`, `DEPLOYMENT.md`) ✅
+- Mandatory Rights Declaration & Risk Label System (Section 2.2, 2.3) ✅
+- Source Ingestion (yt-dlp + local file) & ffprobe extraction (`SourceAsset` DB table) ✅
+- Faster-Whisper word-level transcription worker ✅
+- PySceneDetect scene boundary detection worker ✅
+- MediaPipe subject/face tracking service with center-crop fallback ✅
+- Server-Sent Events (SSE) `/api/projects/{id}/events` & `/api/projects/{id}/audit-trail` ✅
+- Test fixture set (3 synthetic MP4 files) & 15/15 passing tests ✅
 
 ## Phases
 - **Phase 0 (Policy & Docs):** [x] Completed
 - **Phase 1 (Foundation):** [x] Completed
-- **Phase 2 (Ingestion & Analysis):** [ ] Not started
+- **Phase 2 (Ingestion & Analysis):** [x] Completed
+- **Phase 3 (Brief-Aware Selection):** [ ] Next up
 - **Phase 3 (Brief-Aware Selection):** [ ] Not started
 - **Phase 4 (First Render):** [ ] Not started
 - **Phase 5 (Editorial Transformation):** [ ] Not started

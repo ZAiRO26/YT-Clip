@@ -22,10 +22,10 @@
 - [x] Build yt-dlp ingestion adapter with URL validation and error states.
 - [x] Build local-file upload pipeline.
 - [x] Use ffprobe for source metadata extraction.
-- [ ] Implement faster-whisper transcript worker with word-level timestamps.
-- [ ] Add PySceneDetect scene-boundary worker.
-- [ ] Add MediaPipe subject/face track analysis with center-crop fallback.
-- [ ] Persist job events and stream status over SSE.
+- [x] Implement faster-whisper transcript worker with word-level timestamps.
+- [x] Add PySceneDetect scene-boundary worker.
+- [x] Add MediaPipe subject/face track analysis with center-crop fallback.
+- [x] Persist job events and stream status over SSE.
 - [x] Create fixture set of 3 authorized/open test media files.
 
 ## Phase 3 — Brief-Aware Candidate Selection

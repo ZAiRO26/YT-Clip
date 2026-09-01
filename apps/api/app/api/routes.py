@@ -142,8 +142,8 @@ async def create_project(
         )
 
     # Compute source risk label
-    from clipforge_core.schemas import compute_source_risk
     from clipforge_core.models import ProjectAuditEvent
+    from clipforge_core.schemas import compute_source_risk
 
     risk_label = compute_source_risk(data.rights_basis, data.source_type, bool(data.rights_proof_url))
 
@@ -594,3 +594,89 @@ async def reclip_project(
         "task_id": task_id,
         "settings": data.model_dump(),
     }
+
+
+# ============================================
+# SSE & Audit Trail (context2-upgrade.md Section 3.2 & 7.1)
+# ============================================
+@router.get("/projects/{project_id}/events")
+async def stream_project_events(
+    project_id: str,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """
+    Server-Sent Events (SSE) stream for real-time project pipeline updates.
+    """
+    import asyncio
+    import json
+
+    from fastapi.responses import StreamingResponse
+
+    async def event_generator():
+        while True:
+            result = await session.execute(
+                select(Project)
+                .options(selectinload(Project.jobs))
+                .where(Project.id == uuid.UUID(project_id))
+            )
+            project = result.scalar_one_or_none()
+            if not project:
+                yield f"event: error\ndata: {json.dumps({'error': 'Project not found'})}\n\n"
+                break
+
+            payload = {
+                "project_id": str(project.id),
+                "status": project.status,
+                "jobs": [
+                    {
+                        "id": str(j.id),
+                        "stage": j.stage,
+                        "status": j.status,
+                        "error_message": j.error_message,
+                    }
+                    for j in project.jobs
+                ],
+            }
+            yield f"data: {json.dumps(payload)}\n\n"
+
+            if project.status in ("done", "failed"):
+                break
+
+            await asyncio.sleep(1.0)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/projects/{project_id}/audit-trail")
+async def get_project_audit_trail(
+    project_id: str,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """
+    Returns full immutable audit trail for rights, ingest, and editorial events.
+    """
+    from clipforge_core.models import ProjectAuditEvent
+
+    result = await session.execute(
+        select(ProjectAuditEvent)
+        .where(ProjectAuditEvent.project_id == uuid.UUID(project_id))
+        .order_by(ProjectAuditEvent.created_at.asc())
+    )
+    events = result.scalars().all()
+    return [
+        {
+            "id": str(e.id),
+            "event_type": e.event_type,
+            "payload": e.payload,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in events
+    ]

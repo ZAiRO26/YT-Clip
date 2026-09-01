@@ -1,6 +1,7 @@
 from pathlib import Path
+
 import pytest
-from clipforge_core.services.media_probe import probe_media, ProbeError
+from clipforge_core.services.media_probe import probe_media
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
@@ -8,7 +9,7 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 def test_probe_explainer_1080p():
     fixture = FIXTURES_DIR / "authorized_explainer_1080p.mp4"
     assert fixture.exists(), "Fixture missing"
-    
+
     probe = probe_media(fixture)
     assert probe["width"] == 1920
     assert probe["height"] == 1080
@@ -22,7 +23,7 @@ def test_probe_explainer_1080p():
 def test_probe_vertical_720p():
     fixture = FIXTURES_DIR / "authorized_vertical_720p.mp4"
     assert fixture.exists(), "Fixture missing"
-    
+
     probe = probe_media(fixture)
     assert probe["width"] == 720
     assert probe["height"] == 1280
@@ -34,7 +35,7 @@ def test_probe_vertical_720p():
 def test_probe_commentary_24fps():
     fixture = FIXTURES_DIR / "authorized_commentary_short.mp4"
     assert fixture.exists(), "Fixture missing"
-    
+
     probe = probe_media(fixture)
     assert probe["width"] == 1280
     assert probe["height"] == 720

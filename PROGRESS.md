@@ -33,7 +33,20 @@
    - **Task 1.7 (Worker Queues):** Configured 6 v2 named Celery queues (`ingest`, `analysis`, `llm`, `editorial`, `render`, `qa`) plus no-op verification task with passing unit tests.
    - **Task 1.8 (Tracking & Templates):** Created complete `.env.example` templates, `start-v2.bat`, and rewritten `DEPLOYMENT.md`.
 
-## Next Session / Immediate Next Step
-- **Phase 2 — Source Ingestion and Analysis**
-  - Next Task: **Implement project creation with mandatory rights declaration (Section 2.2).**
-  - *Note:* Per ADR-007, founder can provide hardware specs (RAM, CPU, GPU/VRAM) before starting Phase 2 AI worker tuning.
+10. **Phase 2 (Source Ingestion and Analysis) — 100% COMPLETE:**
+    - **Rights & Policy Engine (Tasks 2.1 & 2.2):** Implemented mandatory rights declaration model (`owned`, `written_permission`, `authorized_campaign`, `commentary_review`, `other_unconfirmed`), automated workflow risk classification (`lower_workflow_risk`, `needs_review`, `unknown`), and immutable `ProjectAuditEvent` recording.
+    - **Frontend Studio UI:** Built rights declaration picker, source risk badges, and 6 editorial template options (`explainer`, `commentary`, `news_context`, `reaction_pip`, `quote_breakdown`, `campaign_promo`) in `NewProjectPage`.
+    - **Technical Probe & Ingestion (Tasks 2.3, 2.4, 2.5):** Built `media_probe.py` using `ffprobe` for frame-accurate metadata (duration, width, height, fps, codecs, bitrate, channels) and persisted into `SourceAsset` DB table. Enhanced `yt-dlp` adapter and local file ingestion.
+    - **Analysis Workers (Tasks 2.6, 2.7, 2.8):**
+      - Faster-Whisper with word-level timestamps and VAD voice activity detection.
+      - PySceneDetect 0.7.1 scene cut boundary extractor.
+      - MediaPipe face & speaker tracking with exponential coordinate smoothing and center-crop fallback.
+      - Unified `run_analysis` worker emitting consolidated `analysis.json` and audit logs.
+    - **Real-Time Streaming & Audit Trail (Task 2.9):** Added SSE endpoint `GET /api/projects/{id}/events` and audit trail endpoint `GET /api/projects/{id}/audit-trail`.
+    - **Fixtures & QA Suite (Task 2.10):** Synthesized 3 test media fixtures and verified 15/15 unit tests passing.
+
+## Next Milestone: Phase 3 — Brief-Aware Candidate Selection
+- Implement `LLMProvider` OpenAI-compatible adapter with Pydantic validation & retry.
+- Build candidate evaluation prompt using transcript + scene boundaries + brief.
+- Compute Transformation Score (0–100) per candidate (Section 2.4).
+- Generate candidate JSON with viral score, rationale, hook classification, and suggested editorial overlays.
