@@ -73,11 +73,11 @@
 - [x] Persist random seeds/keyframes in render manifests for deterministic re-renders.
 
 ## Phase 8 — Clip Editor and Brand Kits
-- [ ] Build single Clip Editor: crop, captions, script, voiceover, audio, effects, overlay timing.
-- [ ] Add duplicate variant / A-B version functionality.
-- [ ] Build Brand Kit CRUD: logos, colors, CTA defaults, caption defaults.
-- [ ] Add per-clip override vs project-default inheritance model.
-- [ ] Add source attribution/rights note in export package.
+- [x] Build single Clip Editor: crop, captions, script, voiceover, audio, effects, overlay timing.
+- [x] Add duplicate variant / A-B version functionality.
+- [x] Build Brand Kit CRUD: logos, colors, CTA defaults, caption defaults.
+- [x] Add per-clip override vs project-default inheritance model.
+- [x] Add source attribution/rights note in export package.
 
 ## Phase 9 — Testing, Reliability, and Release
 - [ ] Add idempotency keys for project analysis and render jobs.

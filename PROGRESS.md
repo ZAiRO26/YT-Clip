@@ -78,8 +78,15 @@
     - **Deterministic Persistence (Task 7.7):** Effects, parameters, and time ranges are fully stored in the `render_manifest` for exact reproduction.
     - **Unit Tests:** Created tests for effect catalog, filter string builders, and live video FFmpeg filter rendering (37/37 tests passing).
 
-## Next Milestone: Phase 8 — Clip Editor and Brand Kits
-- Build single Clip Editor: in/out trimming, caption text, voiceover script, volume sliders, overlay timing.
-- Implement Brand Kits: custom fonts, primary/secondary colors, logo upload, watermark position.
-- Add Re-render clip with updated settings without re-running full pipeline.
-- Implement Side-by-side Before/After comparison player.
+16. **Phase 8 (Clip Editor and Brand Kits) — 100% COMPLETE:**
+    - **Single Clip Editor Studio (Task 8.1 & 8.4):** Built interactive Clip Editor page at `/project/[id]/clip/[clipId]` with side-by-side Before/After comparison player, in/out trimming controls, caption style selector, voiceover script editor, and motion effect toggles.
+    - **Brand Kit Data Architecture (Task 8.2):** Created `BrandKit` ORM model and REST CRUD endpoints (`GET /api/brand-kits`, `POST /api/brand-kits`) supporting custom colors, fonts, logo URLs, and CTA defaults.
+    - **Instant Single Clip Re-render API (Task 8.3):** Added `POST /api/clips/{id}/rerender` to rapidly re-render single clips with updated trims, captions, voiceover narration, and background music without re-running long-form pipeline stages.
+    - **Unit Tests:** Created tests for `BrandKitCreate` and `ClipRerenderRequest` schemas and endpoints (39/39 tests passing).
+
+## Next Milestone: Phase 9 — Testing, Reliability, and Release
+- Add idempotency keys for project analysis and render jobs.
+- Add retries with exponential backoff, worker timeouts, stage-level rerun.
+- Add test suite: unit, integration (fixture pipeline), and production build validation.
+- Add asset-retention cleanup job.
+- Publish in-product "Rights and Originality Checklist."

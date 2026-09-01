@@ -212,18 +212,27 @@ function ClipCard({
             </button>
           </div>
           
-          {clip.file_url && clip.review_status === "approved" && (
-            <a
-              href={videoUrl}
-              download={`clip-${clip.id}.mp4`}
-              className="flex items-center justify-center gap-1.5 w-full rounded-lg bg-primary/10 text-primary border border-primary/20 px-3 py-2 text-xs font-medium transition-all hover:bg-primary hover:text-primary-foreground"
-              target="_blank"
-              rel="noopener noreferrer"
+          {/* Edit Studio & Download buttons */}
+          <div className="flex gap-2">
+            <Link
+              href={`/project/${clip.project_id}/clip/${clip.id}`}
+              className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-background border border-border px-3 py-2 text-xs font-medium text-cf-muted hover:text-white hover:border-primary/50 transition-colors"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Download Clip
-            </a>
-          )}
+              ✏️ Edit Clip
+            </Link>
+            {clip.file_url && clip.review_status === "approved" && (
+              <a
+                href={videoUrl}
+                download={`clip-${clip.id}.mp4`}
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-primary/10 text-primary border border-primary/20 px-3 py-2 text-xs font-medium transition-all hover:bg-primary hover:text-primary-foreground"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download
+              </a>
+            )}
+          </div>
         </div>
       </div>
     </div>

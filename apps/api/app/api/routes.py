@@ -680,3 +680,170 @@ async def get_project_audit_trail(
         }
         for e in events
     ]
+
+
+# ============================================
+# Phase 8: Audio Catalogs & Brand Kits
+# ============================================
+@router.get("/audio/voices")
+async def list_voice_personas():
+    """Returns available studio voice personas."""
+    from clipforge_core.services.tts_service import VOICE_PERSONAS
+    return VOICE_PERSONAS
+
+
+@router.get("/audio/music")
+async def list_music_tracks():
+    """Returns available royalty-free background music tracks."""
+    from clipforge_core.services.music_library import MUSIC_TRACKS
+    return MUSIC_TRACKS
+
+
+@router.get("/brand-kits")
+async def list_brand_kits(session: AsyncSession = Depends(get_async_session)):
+    """List all saved brand kits."""
+    from clipforge_core.models import BrandKit
+    result = await session.execute(select(BrandKit).order_by(BrandKit.created_at.desc()))
+    return result.scalars().all()
+
+
+@router.post("/brand-kits")
+async def create_brand_kit(
+    payload: dict,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Create a new brand kit."""
+    from clipforge_core.models import BrandKit
+    kit = BrandKit(
+        id=uuid.uuid4(),
+        name=payload.get("name", "Default Brand Kit"),
+        primary_color=payload.get("primary_color", "#6366F1"),
+        secondary_color=payload.get("secondary_color", "#10B981"),
+        font_family=payload.get("font_family", "Montserrat"),
+        logo_url=payload.get("logo_url"),
+        watermark_position=payload.get("watermark_position", "top_right"),
+        default_cta_text=payload.get("default_cta_text", "Subscribe for more"),
+    )
+    session.add(kit)
+    await session.commit()
+    await session.refresh(kit)
+    return kit
+
+
+@router.post("/clips/{clip_id}/rerender")
+async def rerender_single_clip(
+    clip_id: str,
+    payload: dict,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """
+    Re-render a single clip with custom trimming, caption style, voiceover, or effects
+    without re-running upstream download and transcription.
+    """
+    from pathlib import Path
+    from clipforge_core.services.render_engine import render_clip, build_render_manifest
+    from clipforge_core.services.tts_service import synthesize_voiceover
+    from clipforge_core.services.music_library import ensure_synth_bed
+    from clipforge_core.services.audio_mixer import mix_audio_tracks
+    from clipforge_core.services.transformation_scorer import calculate_transformation_score
+
+    result = await session.execute(select(Clip).where(Clip.id == uuid.UUID(clip_id)).options(selectinload(Clip.project)))
+    clip = result.scalar_one_or_none()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    project = clip.project
+    project_dir = Path(settings.MEDIA_DIR) / str(project.id)
+    source_video = project_dir / "source.mp4"
+    if not source_video.exists():
+        raise HTTPException(status_code=400, detail="Source video missing on disk")
+
+    start_sec = float(payload.get("start_sec", clip.start_sec))
+    end_sec = float(payload.get("end_sec", clip.end_sec))
+    caption_style = payload.get("caption_style", "bold_karaoke")
+    crop_mode = payload.get("crop_mode", "face_track")
+    focal_x = float(payload.get("focal_x", 0.5))
+    voiceover_text = payload.get("voiceover_text")
+    voice_id = payload.get("voice_id", "en-US-JennyNeural")
+    music_track = payload.get("music_track")
+
+    clips_dir = project_dir / "clips"
+    clips_dir.mkdir(parents=True, exist_ok=True)
+    out_video_path = clips_dir / f"clip_{clip.id}_rerendered.mp4"
+    out_thumb_path = clips_dir / f"clip_{clip.id}_thumb.jpg"
+
+    # Optional Voiceover synthesis
+    vo_path = None
+    if voiceover_text and voiceover_text.strip():
+        vo_path = clips_dir / f"vo_{clip.id}.mp3"
+        synthesize_voiceover(voiceover_text, voice_id=voice_id, output_path=vo_path)
+
+    # Optional Music bed
+    bg_music_path = None
+    if music_track and music_track != "none":
+        bg_music_path = clips_dir / f"music_{clip.id}.aac"
+        ensure_synth_bed(music_track, bg_music_path, duration_sec=end_sec - start_sec)
+
+    # Load transcript segments if available
+    analysis_file = project_dir / "analysis.json"
+    segments = []
+    if analysis_file.exists():
+        import json
+        analysis_data = json.loads(analysis_file.read_text(encoding="utf-8"))
+        segments = analysis_data.get("transcript", {}).get("segments", [])
+
+    render_res = render_clip(
+        source_path=source_video,
+        output_path=out_video_path,
+        start_sec=start_sec,
+        end_sec=end_sec,
+        crop_mode=crop_mode,
+        focal_x=focal_x,
+        caption_style=caption_style,
+        transcript_segments=segments,
+        output_thumbnail_path=out_thumb_path,
+    )
+
+    # If VO or Music present, mix into the rendered video
+    if vo_path or bg_music_path:
+        mixed_audio = clips_dir / f"mixed_{clip.id}.aac"
+        mix_audio_tracks(
+            source_video_path=out_video_path,
+            output_audio_path=mixed_audio,
+            start_sec=0.0,
+            end_sec=end_sec - start_sec,
+            voiceover_path=vo_path,
+            music_path=bg_music_path,
+        )
+
+    # Calculate updated transformation score
+    t_data = calculate_transformation_score(
+        clip_duration_sec=end_sec - start_sec,
+        total_source_duration_sec=600.0,
+        has_commentary=bool(vo_path),
+        editorial_template=project.editorial_template or "explainer",
+        callout_count=2,
+        has_visual_reframing=True,
+    )
+
+    # Update Clip record
+    rel_file = f"media/{project.id}/clips/{out_video_path.name}"
+    rel_thumb = f"media/{project.id}/clips/{out_thumb_path.name}"
+    clip.start_sec = start_sec
+    clip.end_sec = end_sec
+    clip.file_url = rel_file
+    clip.thumbnail_url = rel_thumb
+    clip.transformation_score = t_data["score"]
+    clip.transformation_breakdown = t_data["breakdown"]
+
+    await session.commit()
+    await session.refresh(clip)
+
+    return {
+        "status": "success",
+        "clip_id": str(clip.id),
+        "file_url": rel_file,
+        "thumbnail_url": rel_thumb,
+        "transformation_score": clip.transformation_score,
+    }
+

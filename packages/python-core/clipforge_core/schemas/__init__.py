@@ -247,3 +247,43 @@ class CandidateSelectionResponse(BaseModel):
     clips: list[CandidateClipSchema]
     total_found: int
 
+
+# ============================================
+# Brand Kits & Clip Re-render (context2-upgrade.md Section 5.4 & Phase 8)
+# ============================================
+class BrandKitCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    primary_color: str = Field(default="#6366F1", pattern="^#[0-9a-fA-F]{6}$")
+    secondary_color: str = Field(default="#10B981", pattern="^#[0-9a-fA-F]{6}$")
+    font_family: str = Field(default="Montserrat", max_length=50)
+    logo_url: str | None = None
+    watermark_position: Literal["top_right", "top_left", "bottom_right", "bottom_left"] = "top_right"
+    default_cta_text: str = Field(default="Subscribe for more", max_length=100)
+
+
+class BrandKitResponse(BaseModel):
+    id: UUID
+    name: str
+    primary_color: str
+    secondary_color: str
+    font_family: str
+    logo_url: str | None
+    watermark_position: str
+    default_cta_text: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ClipRerenderRequest(BaseModel):
+    start_sec: float = Field(..., ge=0.0)
+    end_sec: float = Field(..., ge=1.0)
+    caption_style: str = Field(default="bold_karaoke", pattern="^(bold_karaoke|minimal|clean_subtitle|none)$")
+    crop_mode: str = Field(default="face_track", pattern="^(face_track|blur_background|center)$")
+    focal_x: float = Field(default=0.5, ge=0.0, le=1.0)
+    voiceover_text: str | None = None
+    voice_id: str | None = None
+    music_track: str | None = None
+    effects: list[dict[str, Any]] = Field(default_factory=list)
+
+

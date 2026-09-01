@@ -178,3 +178,18 @@ class Job(Base):
         CheckConstraint("status IN ('pending', 'running', 'success', 'failed', 'retrying')", name="ck_jobs_status"),
         Index("idx_jobs_project_stage", "project_id", "stage"),
     )
+
+
+class BrandKit(Base):
+    __tablename__ = "brand_kits"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(Text, nullable=False)
+    primary_color = Column(Text, nullable=False, server_default=text("'#6366F1'"))
+    secondary_color = Column(Text, nullable=False, server_default=text("'#10B981'"))
+    font_family = Column(Text, nullable=False, server_default=text("'Montserrat'"))
+    logo_url = Column(Text, nullable=True)
+    watermark_position = Column(Text, nullable=False, server_default=text("'top_right'"))
+    default_cta_text = Column(Text, nullable=False, server_default=text("'Subscribe for more'"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
