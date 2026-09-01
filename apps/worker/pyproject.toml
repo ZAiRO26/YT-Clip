@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "clipforge-worker"
+version = "0.2.0"
+description = "ClipForge AI Celery Worker Service"
+requires-python = ">=3.11"
+dependencies = [
+    "clipforge-core",
+    "celery[redis]>=5.4.0",
+]
+
+[tool.uv.sources]
+clipforge-core = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

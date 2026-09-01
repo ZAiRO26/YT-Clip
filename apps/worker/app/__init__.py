@@ -1,0 +1,1 @@
+"""ClipForge AI — Worker Package."""

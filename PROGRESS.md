@@ -14,19 +14,16 @@
    - `docs/DECISIONS.md` — 10 Architecture Decision Records (stack, monorepo, migration, mode, TTS, orchestration, hardware, brand, UI, publishing).
    - `docs/RENDER_MANIFEST_SCHEMA.json` — Full JSON Schema for deterministic render manifests (source, output, crop, captions, audio, effects, editorial, metadata).
    - `TASKS.md` — Complete v2 master task list across all 10 phases.
-
-### Architecture Decisions Recorded
-- ADR-001: Stack selection (Next.js + FastAPI + Celery + Postgres + FFmpeg + OmniRoute)
-- ADR-002: Monorepo structure with `packages/python-core/clipforge_core/`
-- ADR-003: Incremental migration strategy on feature branch
-- ADR-004: Local-first browser web app via Docker Compose
-- ADR-005: Voice cloning deferred indefinitely
-- ADR-006: Celery for MVP orchestration
-- ADR-007: CPU-only for Phase 1; hardware specs pending
-- ADR-008: "ClipForge AI" working name
-- ADR-009: shadcn/ui stable release
-- ADR-010: No auto-publishing
+8. **Phase 1, Task 1 (Initialize Monorepo) complete:**
+   - Created monorepo structure: `apps/web`, `apps/api`, `apps/worker`, `packages/contracts`, `packages/python-core`, `infra`.
+   - Created root `pnpm-workspace.yaml`, root `package.json`, and root `pyproject.toml` (uv workspace).
+   - Migrated frontend into `apps/web` (`@clipforge/web`) and verified Next.js 16 build passing with zero errors.
+   - Migrated shared Python models, database, services, and workers into `packages/python-core` (`clipforge-core`).
+   - Created thin service shells in `apps/api` (`clipforge-api`) and `apps/worker` (`clipforge-worker`) referencing shared `clipforge-core`.
+   - Verified Python imports and Celery task registration (all 9 tasks detected).
+   - Created `infra/docker-compose.yml` with Postgres 16, Redis 7, and MinIO S3-compatible storage.
+   - Kept original `frontend/` and `backend/` completely untouched for safe rollback.
 
 ## Next Step
-- **Awaiting founder approval of Phase 0 deliverables.**
-- After approval, present the detailed Phase 1 Task 1 migration plan with exact old-to-new file mapping and rollback plan before any directory changes.
+- **Awaiting founder approval of Phase 1, Task 1.**
+- Next task: **Phase 1, Task 2 — Configure pnpm workspace and uv Python workspace** (scripts, dev tasks, linking).

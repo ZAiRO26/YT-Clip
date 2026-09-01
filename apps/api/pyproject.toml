@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "clipforge-api"
+version = "0.2.0"
+description = "ClipForge AI FastAPI Service"
+requires-python = ">=3.11"
+dependencies = [
+    "clipforge-core",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "python-multipart>=0.0.9",
+]
+
+[tool.uv.sources]
+clipforge-core = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

@@ -7,7 +7,7 @@
 - [x] Update `TASKS.md` with full v2 task list.
 
 ## Phase 1 — Foundation and Local Development
-- [ ] Initialize monorepo: `apps/web`, `apps/api`, `apps/worker`, `packages/contracts`, `packages/python-core`, `infra`.
+- [x] Initialize monorepo: `apps/web`, `apps/api`, `apps/worker`, `packages/contracts`, `packages/python-core`, `infra`.
 - [ ] Configure pnpm workspace and uv Python workspace.
 - [ ] Add Docker Compose: Postgres 16, Redis 7, MinIO, API, worker.
 - [ ] Configure Next.js + Tailwind + shadcn/ui (stable) + v2 design tokens.

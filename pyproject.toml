@@ -1,0 +1,13 @@
+[project]
+name = "clipforge-workspace"
+version = "0.2.0"
+description = "ClipForge AI workspace root"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv.workspace]
+members = [
+    "packages/python-core",
+    "apps/api",
+    "apps/worker",
+]

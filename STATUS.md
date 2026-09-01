@@ -3,7 +3,8 @@
 ## Current State
 - **Branch:** `feature/clipforge-v2-foundation`
 - **Phase 0 (Product Policy & Documentation):** ✅ Complete
-- **Phase 1 (Foundation & Monorepo):** ⏳ Not started — awaiting founder approval of Phase 0
+- **Phase 1, Task 1 (Initialize Monorepo):** ✅ Complete
+- **Next Task:** Phase 1, Task 2 (Configure pnpm workspace and uv Python workspace)
 
 ## v1 Baseline
 - `master` branch contains the QA-verified v1 codebase (commit `f342cbe`).
