@@ -1,6 +1,6 @@
 from unittest.mock import AsyncMock, patch
-import pytest
 
+import pytest
 from clipforge_core.services.llm_client import llm_client
 from clipforge_core.workers.select import _build_selection_prompt
 
