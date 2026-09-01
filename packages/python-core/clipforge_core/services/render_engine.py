@@ -3,10 +3,8 @@ ClipForge AI — Professional FFmpeg Render Engine (v2)
 Renders clips with smart 9:16 reframing, blurred-background vertical layouts, ASS caption burn-in,
 loudnorm audio mastering, and deterministic Render Manifest generation conforming to RENDER_MANIFEST_SCHEMA.json.
 """
-import json
 import logging
 import subprocess
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -202,7 +200,7 @@ def render_clip(
     logger.info(f"[RenderEngine] Rendering clip: {start_sec:.1f}s -> {end_sec:.1f}s (mode={crop_mode}, captions={caption_style})")
 
     try:
-        proc = subprocess.run(
+        subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

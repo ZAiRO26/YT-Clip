@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from clipforge_core.services.caption_renderer import generate_ass_subtitles
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"

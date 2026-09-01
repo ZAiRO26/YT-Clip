@@ -1,5 +1,5 @@
 from pathlib import Path
-from clipforge_core.services.media_probe import probe_media
+
 from clipforge_core.services.render_engine import build_render_manifest, render_clip
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
