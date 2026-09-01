@@ -7,7 +7,7 @@ Generates high-resolution 1080x1920 PNG graphics for editorial templates:
 4. CTA End Card: Closing takeaway card with call to action.
 """
 from pathlib import Path
-from typing import Literal
+
 from PIL import Image, ImageDraw, ImageFont
 
 

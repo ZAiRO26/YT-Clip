@@ -4,7 +4,7 @@ Analyzes candidate transcript text to detect factual claims, statistics, medical
 or controversial statements, tagging them for human editorial review per context2-upgrade.md Section 2.4.
 """
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 STATISTIC_PATTERN = re.compile(
     r"(\b\d+(?:\.\d+)?%|\$\d+(?:\.\d+)?|\b\d+\s*(?:million|billion|trillion|percent|users|dollars)\b)",

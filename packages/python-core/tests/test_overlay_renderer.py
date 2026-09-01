@@ -1,4 +1,3 @@
-from pathlib import Path
 from clipforge_core.services.overlay_renderer import (
     create_cta_end_card,
     create_hook_card,
