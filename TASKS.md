@@ -11,7 +11,7 @@
 - [x] Configure pnpm workspace and uv Python workspace.
 - [x] Add Docker Compose: Postgres 16, Redis 7, MinIO, API, worker.
 - [x] Configure Next.js + Tailwind + shadcn/ui (stable) + v2 design tokens.
-- [ ] Configure FastAPI, structured logging, `/health`, `/ready`.
+- [x] Configure FastAPI, structured logging, `/health`, `/ready`.
 - [ ] Configure Alembic migrations.
 - [ ] Configure Celery named queues (ingest, analysis, llm, editorial, render, qa) and no-op worker test.
 - [ ] Add environment templates and repository tracking files.
