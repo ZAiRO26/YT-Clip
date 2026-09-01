@@ -48,6 +48,10 @@ desktop.ini
 *.webm
 *.avi
 *.mov
+*.mp3
+*.aac
+*.wav
+*.ass
 media/
 downloads/
 temp/
