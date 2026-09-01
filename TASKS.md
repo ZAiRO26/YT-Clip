@@ -13,7 +13,7 @@
 - [x] Configure Next.js + Tailwind + shadcn/ui (stable) + v2 design tokens.
 - [x] Configure FastAPI, structured logging, `/health`, `/ready`.
 - [x] Configure Alembic migrations.
-- [ ] Configure Celery named queues (ingest, analysis, llm, editorial, render, qa) and no-op worker test.
+- [x] Configure Celery named queues (ingest, analysis, llm, editorial, render, qa) and no-op worker test.
 - [ ] Add environment templates and repository tracking files.
 
 ## Phase 2 — Source Ingestion and Analysis
