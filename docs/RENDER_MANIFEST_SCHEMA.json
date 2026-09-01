@@ -1,0 +1,350 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://clipforge.ai/schemas/render-manifest/v1",
+  "title": "ClipForge AI Render Manifest",
+  "description": "Deterministic, reproducible specification for rendering a single clip. Every generated clip stores this manifest so renders can be reproduced exactly.",
+  "type": "object",
+  "required": [
+    "manifest_version",
+    "clip_id",
+    "project_id",
+    "source",
+    "output",
+    "crop",
+    "captions",
+    "audio",
+    "effects",
+    "editorial",
+    "metadata"
+  ],
+  "properties": {
+    "manifest_version": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version for forward compatibility."
+    },
+    "clip_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "project_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "source": {
+      "type": "object",
+      "required": ["asset_id", "start_seconds", "end_seconds"],
+      "properties": {
+        "asset_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Reference to the source_assets record."
+        },
+        "storage_key": {
+          "type": "string",
+          "description": "Path or key to the source media file."
+        },
+        "start_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "source_duration_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "source_width": { "type": "integer" },
+        "source_height": { "type": "integer" },
+        "source_fps": { "type": "number" },
+        "source_codec": { "type": "string" }
+      }
+    },
+    "output": {
+      "type": "object",
+      "required": ["width", "height", "fps", "video_codec", "audio_codec", "container", "preset"],
+      "properties": {
+        "width": { "type": "integer", "default": 1080 },
+        "height": { "type": "integer", "default": 1920 },
+        "fps": { "type": "number", "default": 30 },
+        "video_codec": { "type": "string", "default": "libx264" },
+        "audio_codec": { "type": "string", "default": "aac" },
+        "container": { "type": "string", "default": "mp4" },
+        "preset": {
+          "type": "string",
+          "enum": ["draft", "standard", "high"],
+          "default": "standard"
+        },
+        "video_bitrate": { "type": "string" },
+        "audio_bitrate": { "type": "string", "default": "128k" }
+      }
+    },
+    "crop": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["center", "face_track", "manual", "blur_background"],
+          "default": "center"
+        },
+        "keyframes": {
+          "type": "array",
+          "description": "Crop position keyframes for face-tracked or manual reframing.",
+          "items": {
+            "type": "object",
+            "required": ["time_sec", "x", "y", "w", "h"],
+            "properties": {
+              "time_sec": { "type": "number" },
+              "x": { "type": "integer" },
+              "y": { "type": "integer" },
+              "w": { "type": "integer" },
+              "h": { "type": "integer" }
+            }
+          }
+        },
+        "safe_text_zone": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reserve space for platform-safe caption/text areas."
+        }
+      }
+    },
+    "captions": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "preset": {
+          "type": "string",
+          "enum": ["bold_karaoke", "minimal", "clean_subtitle", "none"],
+          "default": "bold_karaoke"
+        },
+        "position": {
+          "type": "string",
+          "enum": ["lower_safe_zone", "center", "upper"],
+          "default": "lower_safe_zone"
+        },
+        "language": {
+          "type": "string",
+          "default": "auto"
+        },
+        "segments": {
+          "type": "array",
+          "description": "Word-level or segment-level caption timings.",
+          "items": {
+            "type": "object",
+            "required": ["start_sec", "end_sec", "text"],
+            "properties": {
+              "start_sec": { "type": "number" },
+              "end_sec": { "type": "number" },
+              "text": { "type": "string" }
+            }
+          }
+        },
+        "font_family": { "type": "string" },
+        "font_size": { "type": "integer" },
+        "font_color": { "type": "string" },
+        "outline_color": { "type": "string" },
+        "outline_width": { "type": "integer" }
+      }
+    },
+    "audio": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["original_only", "voiceover_only", "mix", "mute_original_keep_ambient"],
+          "default": "original_only"
+        },
+        "original_volume": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 100
+        },
+        "voiceover_volume": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 100
+        },
+        "background_music_volume": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 0
+        },
+        "voiceover_asset_id": {
+          "type": ["string", "null"],
+          "format": "uuid",
+          "description": "Reference to TTS-generated or user-uploaded narration audio."
+        },
+        "duck_original_under_voiceover": {
+          "type": "boolean",
+          "default": true
+        },
+        "normalize_loudness": {
+          "type": "boolean",
+          "default": true
+        },
+        "target_lufs": {
+          "type": "number",
+          "default": -14
+        }
+      }
+    },
+    "effects": {
+      "type": "object",
+      "properties": {
+        "safe_zones": {
+          "type": "boolean",
+          "default": true
+        },
+        "layers": {
+          "type": "array",
+          "description": "Ordered list of effect layers applied during render.",
+          "items": {
+            "type": "object",
+            "required": ["type", "enabled"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "punch_in_zoom",
+                  "camera_shake",
+                  "film_grain",
+                  "vignette",
+                  "speed_ramp",
+                  "rgb_split",
+                  "vhs_noise",
+                  "background_blur",
+                  "pixelate",
+                  "overlay_asset",
+                  "floating_cta",
+                  "dvd_bounce",
+                  "cta_lower_third"
+                ]
+              },
+              "enabled": { "type": "boolean" },
+              "intensity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "active_windows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["start_sec", "end_sec"],
+                  "properties": {
+                    "start_sec": { "type": "number" },
+                    "end_sec": { "type": "number" }
+                  }
+                }
+              },
+              "params": {
+                "type": "object",
+                "description": "Effect-specific parameters (e.g., speed, asset, scale, opacity).",
+                "additionalProperties": true
+              },
+              "random_seed": {
+                "type": "integer",
+                "description": "Deterministic seed for reproducible effect rendering."
+              }
+            }
+          }
+        }
+      }
+    },
+    "editorial": {
+      "type": "object",
+      "properties": {
+        "template": {
+          "type": "string",
+          "enum": ["explainer", "commentary", "news_context", "reaction_pip", "quote_breakdown", "campaign_promotion"],
+          "description": "Editorial structure template applied to this clip."
+        },
+        "hook_text": {
+          "type": ["string", "null"],
+          "description": "Generated or user-edited hook for the clip opening."
+        },
+        "narration_script": {
+          "type": ["string", "null"],
+          "description": "Approved narration script text."
+        },
+        "narration_status": {
+          "type": "string",
+          "enum": ["none", "draft", "reviewed", "rendered"],
+          "default": "none"
+        },
+        "requires_human_fact_check": {
+          "type": "boolean",
+          "default": false
+        },
+        "callout_labels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "start_sec": { "type": "number" },
+              "end_sec": { "type": "number" },
+              "position": { "type": "string" }
+            }
+          }
+        },
+        "source_attribution": {
+          "type": ["string", "null"],
+          "description": "Attribution line shown in the clip."
+        },
+        "cta_text": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "renderer_version": {
+          "type": "string",
+          "description": "Version of the ClipForge render engine that produced this output."
+        },
+        "rendered_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "render_duration_seconds": {
+          "type": "number",
+          "description": "Wall-clock time the render took."
+        },
+        "transformation_score": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "transformation_breakdown": {
+          "type": "object",
+          "properties": {
+            "rights_completeness": { "type": "integer", "minimum": 0, "maximum": 25 },
+            "editorial_contribution": { "type": "integer", "minimum": 0, "maximum": 30 },
+            "visual_transformation": { "type": "integer", "minimum": 0, "maximum": 20 },
+            "clip_uniqueness": { "type": "integer", "minimum": 0, "maximum": 15 },
+            "human_review": { "type": "integer", "minimum": 0, "maximum": 10 }
+          }
+        },
+        "rights_basis": {
+          "type": "string",
+          "description": "Copied from project-level rights declaration."
+        },
+        "source_risk_label": {
+          "type": "string",
+          "enum": ["lower_workflow_risk", "needs_review", "high_claim_risk", "unknown"]
+        }
+      }
+    }
+  }
+}

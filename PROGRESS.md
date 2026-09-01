@@ -1,24 +1,32 @@
 # Project Progress
 
-## Session Notes
-- Completed a massive UI and reliability audit.
-- Built a native thumbnail generation pipeline using FFmpeg.
-- Polished the Next.js UI component design with dark mode fixes, textareas, and toasts.
-- Implemented robust LLM fallback strategies to prevent pipeline crashes when the API is down.
-- Hardened the `yt-dlp` configuration to ensure successful extraction on modern YouTube videos.
-- Verified backend health, API stability, and Next.js production builds.
+## Session 4 — v2 Upgrade Kickoff (2026-09-01)
 
-## Achieved So Far
-1. Full backend ORM (SQLAlchemy + asyncpg) + Alembic migrations.
-2. Background worker queue via Celery and Redis.
-3. Integration with `yt-dlp` for video downloading.
-4. Integration with `faster-whisper` for timestamped transcription.
-5. Integration with local LLM gateway for intelligent clipping, with safe fallbacks.
-6. Local FFmpeg-based clipping, zooming (9:16), dynamic text-rendering via ImageMagick, and automated thumbnail extraction.
-7. Next.js 14 frontend with modern UI, API polling, robust error handling, project deletion, and hot toast notifications.
-8. Persisted UI Settings to avoid hardcoding API keys in environment variables.
-9. Dual export methodologies (direct download & local folder sync) for the finalized assets and thumbnails.
-10. Full deployment and system dependencies documentation.
+### Completed
+1. Read and analyzed full v2 product specification (`DOC/context2-upgrade.md`, 1139 lines).
+2. Produced gap analysis comparing v1 codebase to v2 requirements.
+3. Created implementation plan covering 10 phases with exact task breakdowns.
+4. Received and locked in founder decisions on all open questions.
+5. Initialized git repo, committed v1 baseline to `master`.
+6. Created `feature/clipforge-v2-foundation` branch.
+7. **Phase 0 complete:**
+   - `docs/PRODUCT_POLICY.md` — Non-negotiable product boundaries (rights, transformation, export).
+   - `docs/DECISIONS.md` — 10 Architecture Decision Records (stack, monorepo, migration, mode, TTS, orchestration, hardware, brand, UI, publishing).
+   - `docs/RENDER_MANIFEST_SCHEMA.json` — Full JSON Schema for deterministic render manifests (source, output, crop, captions, audio, effects, editorial, metadata).
+   - `TASKS.md` — Complete v2 master task list across all 10 phases.
 
-## Next Session Focus
-- The project is 100% complete based on the current roadmap. All requested UI polish, robustness improvements, and bug fixes have been executed and QA tested. No immediate further action is required unless the user brings up new feature requests.
+### Architecture Decisions Recorded
+- ADR-001: Stack selection (Next.js + FastAPI + Celery + Postgres + FFmpeg + OmniRoute)
+- ADR-002: Monorepo structure with `packages/python-core/clipforge_core/`
+- ADR-003: Incremental migration strategy on feature branch
+- ADR-004: Local-first browser web app via Docker Compose
+- ADR-005: Voice cloning deferred indefinitely
+- ADR-006: Celery for MVP orchestration
+- ADR-007: CPU-only for Phase 1; hardware specs pending
+- ADR-008: "ClipForge AI" working name
+- ADR-009: shadcn/ui stable release
+- ADR-010: No auto-publishing
+
+## Next Step
+- **Awaiting founder approval of Phase 0 deliverables.**
+- After approval, present the detailed Phase 1 Task 1 migration plan with exact old-to-new file mapping and rollback plan before any directory changes.

@@ -1,33 +1,39 @@
 # Project Status
 
 ## Current State
-- The backend API is functional with PostgreSQL and Redis.
-- The pipeline (`download` -> `transcribe` -> `select` -> `crop` -> `caption`) is fully operational.
-- The Next.js frontend has been styled with modern, dark-mode aesthetics (Tailwind, Framer Motion).
-- Live settings for LLM proxy (OmniRoute/FreeLLMAPI) are hooked up.
-- Automated and manual clip export capabilities have been added.
-- **LLM integration fixed** — `stream: false` prevents SSE streaming error.
-- **Caption quality fixed** — full sentence segments instead of word-by-word, with Devanagari font support.
-- **Re-clip feature added** — generate more clips from existing videos without re-downloading or re-transcribing.
+- **Branch:** `feature/clipforge-v2-foundation`
+- **Phase 0 (Product Policy & Documentation):** ✅ Complete
+- **Phase 1 (Foundation & Monorepo):** ⏳ Not started — awaiting founder approval of Phase 0
+
+## v1 Baseline
+- `master` branch contains the QA-verified v1 codebase (commit `f342cbe`).
+- v1 pipeline (download → transcribe → select → crop → caption) is fully operational.
+- v1 frontend (Next.js 14 + Tailwind + dark mode) is production-ready.
+
+## v2 Upgrade Status
+- Product specification: `DOC/context2-upgrade.md` (source of truth)
+- Product policy: `docs/PRODUCT_POLICY.md` ✅
+- Architecture decisions: `docs/DECISIONS.md` ✅
+- Render manifest schema: `docs/RENDER_MANIFEST_SCHEMA.json` ✅
+- Master task list: `TASKS.md` ✅
+
+## Key Decisions Locked
+1. Incremental migration on `feature/clipforge-v2-foundation` branch.
+2. Local-first browser web app (Docker Compose), not desktop.
+3. Shared Python package at `packages/python-core/clipforge_core/`.
+4. Phase 1 is CPU-only. No mandatory GPU/CUDA dependencies.
+5. "ClipForge AI" as working product name.
+6. shadcn/ui stable release, not canary.
 
 ## Phases
-- **Phase 1 (Foundation):** [x] Completed
-- **Phase 2 (Backend Orchestration):** [x] Completed
-- **Phase 3 (AI Video Pipeline):** [x] Completed
-- **Phase 4 (Frontend UI):** [x] Completed
-- **Phase 5 (Polish):** [x] Completed
-- **Phase 6 (Launch):** [x] Completed (Added Export capabilities and DEPLOYMENT.md)
-- **Phase 7 (Post-Launch Fixes & Features):** [x] Completed
-
-## Recent Changes (Session 3)
-- Implemented automated thumbnail generation during the pipeline (crop step extracts thumbnail).
-- Added `POST /api/clips/{id}/thumbnail` endpoint to regenerate a clip's thumbnail.
-- Upgraded the UI dashboard to render actual clip thumbnails instead of generic icons.
-- Added graceful fallbacks and warning banners to the frontend when the LLM connection fails.
-- Hardened `yt-dlp` download configuration to gracefully manage tricky video formats.
-- Added comprehensive "Delete Project" flow in UI + cascading deletion in DB and File System.
-- Fixed `POST /api/projects/{id}/export` endpoint by resolving the file paths dynamically via `settings.MEDIA_DIR`.
-- Ran full backend API smoke test and frontend build QA (100% stable).
-
-## Celery Worker Command (must include --include flag)
-`uv run celery -A app.celery_app worker -Q default,download,transcribe,select,crop,caption -c 2 -P solo --loglevel=info --include=app.services.pipeline`
+- **Phase 0 (Policy & Docs):** [x] Completed
+- **Phase 1 (Foundation):** [ ] Not started
+- **Phase 2 (Ingestion & Analysis):** [ ] Not started
+- **Phase 3 (Brief-Aware Selection):** [ ] Not started
+- **Phase 4 (First Render):** [ ] Not started
+- **Phase 5 (Editorial Transformation):** [ ] Not started
+- **Phase 6 (Voiceover & Audio):** [ ] Not started
+- **Phase 7 (Motion Effects):** [ ] Not started
+- **Phase 8 (Clip Editor & Brand Kits):** [ ] Not started
+- **Phase 9 (Testing & Reliability):** [ ] Not started
+- **Phase 10 (Scale Readiness):** [ ] Not started
