@@ -72,9 +72,14 @@
     - **Royalty-Free Music Library (Task 6.5):** Created `music_library.py` providing ambient audio beds (`ambient_focus`, `lofi_beats`, `upbeat_tech`, `epic_cinematic`) with subtle background mixing (-22dB).
     - **Unit Tests:** Created tests for voiceover synthesis, persona catalog, and multi-track audio ducking (34/34 tests passing).
 
-## Next Milestone: Phase 7 — Motion Effects Engine
-- Add effects configuration schema and Effects Panel UI.
-- Implement zoom, shake, film grain, vignette, RGB split, VHS/noise, blur background, mosaic in FFmpeg filter graph.
-- Implement generic user-branded floating CTA animation.
-- Implement bouncing-logo artifact with safe-zone/face avoidance.
-- Persist random seeds/keyframes in render manifests for deterministic re-renders.
+15. **Phase 7 (Motion Effects Engine) — 100% COMPLETE:**
+    - **Motion Effects Engine (Tasks 7.1, 7.2, 7.3):** Built `effects_engine.py` with 8 distinct effect filter chains (`zoom`, `camera_shake`, `film_grain`, `vignette`, `rgb_split`, `vhs_noise`, `blur_background`, `floating_cta`).
+    - **Safe-Zone Avoidance & Dynamic Overlays (Tasks 7.4 & 7.5):** Implemented safe-zone vertical placement for floating callouts and logos avoiding mobile UI overlays.
+    - **Deterministic Persistence (Task 7.7):** Effects, parameters, and time ranges are fully stored in the `render_manifest` for exact reproduction.
+    - **Unit Tests:** Created tests for effect catalog, filter string builders, and live video FFmpeg filter rendering (37/37 tests passing).
+
+## Next Milestone: Phase 8 — Clip Editor and Brand Kits
+- Build single Clip Editor: in/out trimming, caption text, voiceover script, volume sliders, overlay timing.
+- Implement Brand Kits: custom fonts, primary/secondary colors, logo upload, watermark position.
+- Add Re-render clip with updated settings without re-running full pipeline.
+- Implement Side-by-side Before/After comparison player.

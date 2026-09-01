@@ -64,13 +64,13 @@
 - [x] Add audio technical QA to render output.
 
 ## Phase 7 — Motion Effects v1
-- [ ] Add effects configuration schema and Effects Panel UI.
-- [ ] Implement zoom, shake, film grain, vignette, RGB split, VHS/noise, blur background, mosaic.
-- [ ] Implement reusable transparent overlay asset handling.
-- [ ] Implement generic user-branded floating CTA animation.
-- [ ] Implement generic bouncing-logo artifact with safe-zone/face avoidance.
-- [ ] Enforce effect limits and preview low-res draft before full render.
-- [ ] Persist random seeds/keyframes in render manifests for deterministic re-renders.
+- [x] Add effects configuration schema and Effects Panel UI.
+- [x] Implement zoom, shake, film grain, vignette, RGB split, VHS/noise, blur background, mosaic.
+- [x] Implement reusable transparent overlay asset handling.
+- [x] Implement generic user-branded floating CTA animation.
+- [x] Implement generic bouncing-logo artifact with safe-zone/face avoidance.
+- [x] Enforce effect limits and preview low-res draft before full render.
+- [x] Persist random seeds/keyframes in render manifests for deterministic re-renders.
 
 ## Phase 8 — Clip Editor and Brand Kits
 - [ ] Build single Clip Editor: crop, captions, script, voiceover, audio, effects, overlay timing.

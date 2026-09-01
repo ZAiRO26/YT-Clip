@@ -9,7 +9,8 @@
 - **Phase 4 (First Professional Render):** ✅ 100% Complete
 - **Phase 5 (Editorial Transformation Layer):** ✅ 100% Complete
 - **Phase 6 (Voiceover and Audio Studio):** ✅ 100% Complete
-- **Next Milestone:** Phase 7 (Motion Effects Engine)
+- **Phase 7 (Motion Effects Engine):** ✅ 100% Complete
+- **Next Milestone:** Phase 8 (Clip Editor and Brand Kits)
 
 ## v1 Baseline
 - `master` branch contains the QA-verified v1 codebase (commit `f342cbe`).
@@ -40,8 +41,9 @@
 - Voiceover TTS Synthesis Engine (5 studio voice personas) ✅
 - Sidechain Audio Ducking Mixer (-12dB source ducking, -14.0 LUFS mastering) ✅
 - Royalty-Free Background Music Library (ambient, lo-fi, upbeat, cinematic) ✅
+- Motion & Visual Effects Engine (8 social vertical video effects) ✅
 - Server-Sent Events (SSE) `/api/projects/{id}/events` & `/api/projects/{id}/audit-trail` ✅
-- Test fixture set (3 synthetic MP4 files) & 34/34 passing tests ✅
+- Test fixture set (3 synthetic MP4 files) & 37/37 passing tests ✅
 
 ## Phases
 - **Phase 0 (Policy & Docs):** [x] Completed
@@ -51,7 +53,7 @@
 - **Phase 4 (First Render):** [x] Completed
 - **Phase 5 (Editorial Transformation):** [x] Completed
 - **Phase 6 (Voiceover & Audio):** [x] Completed
-- **Phase 7 (Motion Effects):** [ ] Next up
-- **Phase 8 (Clip Editor & Brand Kits):** [ ] Not started
+- **Phase 7 (Motion Effects):** [x] Completed
+- **Phase 8 (Clip Editor & Brand Kits):** [ ] Next up
 - **Phase 9 (Testing & Reliability):** [ ] Not started
 - **Phase 10 (Scale Readiness):** [ ] Not started
