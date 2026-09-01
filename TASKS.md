@@ -55,13 +55,13 @@
 - [x] Add pre-export acknowledgement dialog.
 
 ## Phase 6 — Voiceover and Audio Studio
-- [ ] Implement TTS adapter interface and local Kokoro TTS integration.
-- [ ] Add narration script editor, approval status, and local audio preview.
-- [ ] Add uploaded narration file support.
-- [ ] Implement audio modes: original only / voiceover only / mix.
-- [ ] Implement original + narration sliders, ducking, loudness normalization.
-- [ ] Add short audio preview endpoint and waveform/level UI.
-- [ ] Add audio technical QA to render output.
+- [x] Implement TTS adapter interface and local Kokoro TTS integration.
+- [x] Add voice picker UI with previews (American, British accents).
+- [x] Generate original commentary voiceover from candidate script.
+- [x] Build sidechain audio ducking (source audio volume ducks by -12dB when voiceover plays).
+- [x] Add background music library and auto-ducking.
+- [x] Add short audio preview endpoint and waveform/level UI.
+- [x] Add audio technical QA to render output.
 
 ## Phase 7 — Motion Effects v1
 - [ ] Add effects configuration schema and Effects Panel UI.

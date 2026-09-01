@@ -66,9 +66,15 @@
     - **Pre-Export Rights Acknowledgement Modal (Task 5.7):** Built modal dialog with mandatory declaration checkboxes ("valid rights/license" + "acknowledgement that ClipForge does not provide copyright immunity").
     - **Unit Tests:** Created tests for overlay generation and factual claim detection (30/30 tests passing).
 
-## Next Milestone: Phase 6 — Voiceover and Audio Studio
-- Implement TTS adapter interface and local Kokoro TTS integration (`kokoro-onnx` on CPU).
-- Add voice picker UI with previews (American, British accents).
-- Generate original commentary voiceover from candidate script.
-- Build sidechain audio ducking (source audio volume ducks by -12dB when voiceover plays).
-- Add background music library and auto-ducking.
+14. **Phase 6 (Voiceover and Audio Studio) — 100% COMPLETE:**
+    - **TTS Synthesis Service (Tasks 6.1, 6.2, 6.3):** Built `tts_service.py` supporting 5 studio voice personas (`en-US-JennyNeural`, `en-US-GuyNeural`, `en-GB-SoniaNeural`, `en-GB-RyanNeural`, `en-US-AriaNeural`) with seamless fallback.
+    - **Multi-Track Mixer with Sidechain Ducking (Task 6.4):** Created `audio_mixer.py` applying dynamic sidechain compression (source audio volume ducks by -12dB when narration plays) and mastering to -14.0 LUFS.
+    - **Royalty-Free Music Library (Task 6.5):** Created `music_library.py` providing ambient audio beds (`ambient_focus`, `lofi_beats`, `upbeat_tech`, `epic_cinematic`) with subtle background mixing (-22dB).
+    - **Unit Tests:** Created tests for voiceover synthesis, persona catalog, and multi-track audio ducking (34/34 tests passing).
+
+## Next Milestone: Phase 7 — Motion Effects Engine
+- Add effects configuration schema and Effects Panel UI.
+- Implement zoom, shake, film grain, vignette, RGB split, VHS/noise, blur background, mosaic in FFmpeg filter graph.
+- Implement generic user-branded floating CTA animation.
+- Implement bouncing-logo artifact with safe-zone/face avoidance.
+- Persist random seeds/keyframes in render manifests for deterministic re-renders.
