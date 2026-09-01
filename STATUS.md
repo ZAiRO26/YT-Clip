@@ -6,7 +6,8 @@
 - **Phase 1 (Foundation and Local Development):** ✅ 100% Complete
 - **Phase 2 (Source Ingestion and Analysis):** ✅ 100% Complete
 - **Phase 3 (Brief-Aware Candidate Selection):** ✅ 100% Complete
-- **Next Milestone:** Phase 4 (First Professional Render & Manifest Generation)
+- **Phase 4 (First Professional Render):** ✅ 100% Complete
+- **Next Milestone:** Phase 5 (Editorial Transformation Layer)
 
 ## v1 Baseline
 - `master` branch contains the QA-verified v1 codebase (commit `f342cbe`).
@@ -28,16 +29,19 @@
 - Transformation Score Engine (0–100) across 5 pillars (Section 2.4) ✅
 - Brief-Aware Candidate Selection with LLM Gateway & retry logic ✅
 - Candidate ranking, scene snapping, and deduplication logic ✅
+- Professional Render Engine (9:16 reframe, blurred background, loudnorm -14 LUFS) ✅
+- ASS Subtitle Generator with 4 presets (Bold Karaoke, Minimal, Clean Subtitle, None) ✅
+- Deterministic Render Manifest generation conforming to schema ✅
 - Server-Sent Events (SSE) `/api/projects/{id}/events` & `/api/projects/{id}/audit-trail` ✅
-- Test fixture set (3 synthetic MP4 files) & 21/21 passing tests ✅
+- Test fixture set (3 synthetic MP4 files) & 25/25 passing tests ✅
 
 ## Phases
 - **Phase 0 (Policy & Docs):** [x] Completed
 - **Phase 1 (Foundation):** [x] Completed
 - **Phase 2 (Ingestion & Analysis):** [x] Completed
 - **Phase 3 (Brief-Aware Selection):** [x] Completed
-- **Phase 4 (First Render):** [ ] Next up
-- **Phase 5 (Editorial Transformation):** [ ] Not started
+- **Phase 4 (First Render):** [x] Completed
+- **Phase 5 (Editorial Transformation):** [ ] Next up
 - **Phase 6 (Voiceover & Audio):** [ ] Not started
 - **Phase 7 (Motion Effects):** [ ] Not started
 - **Phase 8 (Clip Editor & Brand Kits):** [ ] Not started

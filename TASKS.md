@@ -37,13 +37,13 @@
 - [x] Add unit tests for candidate generation with mocked LLM responses.
 
 ## Phase 4 — First Professional Render
-- [ ] Implement FFmpeg cut/render service with deterministic render manifests.
-- [ ] Implement 9:16 smart reframe using MediaPipe crop keyframes.
-- [ ] Implement blurred-background vertical layout.
-- [ ] Add caption generation and burn-in from word-level timings.
-- [ ] Add caption presets: Bold Karaoke, Minimal, Clean Subtitle, None.
-- [ ] Add render manifest creation and output QA.
-- [ ] Build Review Gallery preview card and approve/reject flow.
+- [x] Implement FFmpeg cut/render service with deterministic render manifests.
+- [x] Implement 9:16 smart reframe using MediaPipe crop keyframes.
+- [x] Implement blurred-background vertical layout.
+- [x] Add caption generation and burn-in from word-level timings.
+- [x] Add caption presets: Bold Karaoke, Minimal, Clean Subtitle, None.
+- [x] Add render manifest creation and output QA.
+- [x] Build Review Gallery preview card and approve/reject flow.
 
 ## Phase 5 — Editorial Transformation Layer
 - [ ] Add editorial-template configuration to project creation.

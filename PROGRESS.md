@@ -52,9 +52,18 @@
     - **Studio UI Integration:** Added Transformation Score badges and virality pills to `ClipCard` in `apps/web`.
     - **Unit Tests (Task 3.6):** Created tests for transformation scorer, candidate ranker, and mocked LLM selection (21/21 passing).
 
-## Next Milestone: Phase 4 — First Professional Render & Manifest Generation
-- Implement FFmpeg cut/render service with deterministic render manifests (`RENDER_MANIFEST_SCHEMA.json`).
-- Implement 9:16 smart reframe using MediaPipe crop keyframes.
-- Implement blurred-background vertical layout for landscape inputs.
-- Add caption generation and burn-in from word-level timings with presets (Bold Karaoke, Minimal, Clean Subtitle, None).
-- Build Review Gallery preview card and approve/reject flow.
+12. **Phase 4 (First Professional Render & Manifest Generation) — 100% COMPLETE:**
+    - **ASS Subtitle Renderer (Tasks 4.4 & 4.5):** Created `caption_renderer.py` supporting 4 presets (`bold_karaoke` with word-by-word `{\k}` highlight, `minimal`, `clean_subtitle`, `none`) with precise timestamp offset calculation.
+    - **FFmpeg Render Engine (Tasks 4.1, 4.2, 4.3):** Built `render_engine.py` with 9:16 smart reframing, blurred-background layout for landscape source inputs, ASS subtitle burn-in, loudnorm audio mastering (-14.0 LUFS), and thumbnail generation.
+    - **Deterministic Render Manifests (Task 4.6):** Built `build_render_manifest` emitting draft-07 JSON manifests conforming to `RENDER_MANIFEST_SCHEMA.json` and saved with every rendered clip.
+    - **End-to-End Pipeline Orchestration (Task 4.7):** Linked Ingest -> Analysis -> Select -> Render in `pipeline.py` and Celery worker.
+    - **Unit Tests:** Created tests for caption generator and deterministic render engine on synthetic fixtures (25/25 tests passing).
+
+## Next Milestone: Phase 5 — Editorial Transformation Layer
+- Add editorial-template configuration to project creation.
+- Generate editable hook, narration draft, callout plan, closing takeaway per clip.
+- Add factual-claim flagging; require manual script review before TTS render.
+- Build hook card, lower-third, callout, attribution, CTA card renderer.
+- Add optional reaction/PiP video layer with responsive layouts.
+- Implement Transformation Readiness Score and action-oriented warning panel.
+- Add pre-export acknowledgement dialog.
