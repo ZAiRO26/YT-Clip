@@ -141,12 +141,24 @@ async def create_project(
             detail="min_length_sec must be less than max_length_sec",
         )
 
+    # Compute source risk label
+    from clipforge_core.schemas import compute_source_risk
+    from clipforge_core.models import ProjectAuditEvent
+
+    risk_label = compute_source_risk(data.rights_basis, data.source_type, bool(data.rights_proof_url))
+
     # Create project
     project = Project(
         id=uuid.uuid4(),
         owner_id=uuid.UUID(owner_id),
+        title=data.title or (f"Project {data.source_value[:30]}"),
         source_type=data.source_type,
         source_value=data.source_value,
+        rights_basis=data.rights_basis,
+        rights_proof_url=data.rights_proof_url,
+        rights_notes=data.rights_notes,
+        source_risk_label=risk_label,
+        editorial_template=data.editorial_template,
         campaign_brief_id=data.campaign_brief_id,
         clip_count=data.clip_count,
         min_length_sec=data.min_length_sec,
@@ -156,6 +168,21 @@ async def create_project(
         status="queued",
     )
     session.add(project)
+
+    # Record Rights Declared Audit Event (context2-upgrade.md Section 2.2 & 7.1)
+    audit_event = ProjectAuditEvent(
+        id=uuid.uuid4(),
+        project_id=project.id,
+        event_type="rights_declared",
+        payload={
+            "rights_basis": data.rights_basis,
+            "rights_proof_url": data.rights_proof_url,
+            "source_risk_label": risk_label,
+            "declared_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    session.add(audit_event)
+
     await session.commit()
     await session.refresh(project)
 

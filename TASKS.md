@@ -17,8 +17,8 @@
 - [x] Add environment templates and repository tracking files.
 
 ## Phase 2 — Source Ingestion and Analysis
-- [ ] Implement project creation with mandatory rights declaration (Section 2.2).
-- [ ] Build source-risk label system (Section 2.3).
+- [x] Implement project creation with mandatory rights declaration (Section 2.2).
+- [x] Build source-risk label system (Section 2.3).
 - [ ] Build yt-dlp ingestion adapter with URL validation and error states.
 - [ ] Build local-file upload pipeline.
 - [ ] Use ffprobe for source metadata extraction.

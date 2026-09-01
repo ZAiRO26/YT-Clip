@@ -34,8 +34,14 @@ export interface JobStatus {
 export interface Project {
   id: string;
   owner_id: string;
+  title?: string;
   source_type: string;
   source_value: string;
+  rights_basis: string;
+  rights_proof_url?: string | null;
+  rights_notes?: string | null;
+  source_risk_label: string;
+  editorial_template: string;
   campaign_brief_id: string | null;
   clip_count: number;
   min_length_sec: number;
@@ -49,8 +55,12 @@ export interface Project {
 
 export interface ProjectListItem {
   id: string;
+  title?: string;
   source_type: string;
   source_value: string;
+  rights_basis: string;
+  source_risk_label: string;
+  editorial_template: string;
   clip_count: number;
   status: string;
   created_at: string;
@@ -71,9 +81,14 @@ export interface Clip {
 }
 
 export interface CreateProjectInput {
-  source_type: "youtube_url" | "local_folder";
+  title?: string;
+  source_type: "youtube_url" | "local_folder" | "upload";
   source_value: string;
-  campaign_brief_id?: string;
+  rights_basis: string;
+  rights_proof_url?: string | null;
+  rights_notes?: string | null;
+  editorial_template?: string;
+  campaign_brief_id?: string | null;
   clip_count?: number;
   min_length_sec?: number;
   max_length_sec?: number;

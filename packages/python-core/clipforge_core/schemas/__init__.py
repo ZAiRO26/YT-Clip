@@ -1,20 +1,60 @@
 """
-ClipForge AI — Pydantic Schemas
-
-Request/response models for all API endpoints.
-Per Backend Schema section 05 of context.md.
+ClipForge AI — Pydantic Schemas (v2)
+Includes mandatory rights basis, source risk labels, editorial templates, and render manifests.
 """
-
 from datetime import datetime
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 # ============================================
+# Rights & Risk Types (context2-upgrade.md Section 2.2 & 2.3)
+# ============================================
+RightsBasisType = Literal[
+    "owned",
+    "written_permission",
+    "authorized_campaign",
+    "commentary_review",
+    "other_unconfirmed",
+]
+
+SourceRiskLabelType = Literal[
+    "lower_workflow_risk",
+    "needs_review",
+    "high_claim_risk",
+    "unknown",
+]
+
+EditorialTemplateType = Literal[
+    "explainer",
+    "commentary",
+    "news_context",
+    "reaction_pip",
+    "quote_breakdown",
+    "campaign_promotion",
+]
+
+
+def compute_source_risk(rights_basis: str, source_type: str = "youtube_url", has_proof: bool = False) -> SourceRiskLabelType:
+    """
+    Computes workflow risk level per context2-upgrade.md Section 2.3:
+      - owned / written_permission / authorized_campaign -> lower_workflow_risk
+      - commentary_review -> needs_review
+      - other_unconfirmed -> unknown / high_claim_risk
+    """
+    if rights_basis in ("owned", "written_permission", "authorized_campaign"):
+        return "lower_workflow_risk"
+    elif rights_basis == "commentary_review":
+        return "needs_review"
+    elif rights_basis == "other_unconfirmed":
+        return "unknown"
+    return "unknown"
+
+
+# ============================================
 # Campaign Briefs
 # ============================================
-
-
 class CampaignBriefCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     brief_json: dict = Field(
@@ -40,11 +80,30 @@ class CampaignBriefResponse(BaseModel):
 # ============================================
 # Projects
 # ============================================
-
-
 class ProjectCreate(BaseModel):
-    source_type: str = Field(..., pattern="^(youtube_url|local_folder)$")
+    title: str | None = Field(default=None, max_length=255)
+    source_type: str = Field(..., pattern="^(youtube_url|local_folder|upload)$")
     source_value: str = Field(..., min_length=1)
+
+    # Mandatory Rights Declaration (Section 2.2)
+    rights_basis: RightsBasisType = Field(
+        ...,
+        description="Mandatory declaration of source rights basis.",
+    )
+    rights_proof_url: str | None = Field(
+        default=None,
+        description="Optional proof URL (permission link, license doc, campaign page)",
+    )
+    rights_notes: str | None = Field(
+        default=None,
+        description="Optional rights context or license notes",
+    )
+
+    # Editorial & Style Configuration
+    editorial_template: EditorialTemplateType = Field(
+        default="explainer",
+        description="Editorial transformation template",
+    )
     campaign_brief_id: UUID | None = None
     clip_count: int = Field(default=5, ge=1, le=50)
     min_length_sec: int = Field(default=20, ge=5, le=300)
@@ -71,8 +130,14 @@ class JobStatus(BaseModel):
 class ProjectResponse(BaseModel):
     id: UUID
     owner_id: UUID
+    title: str | None = None
     source_type: str
     source_value: str
+    rights_basis: str
+    rights_proof_url: str | None = None
+    rights_notes: str | None = None
+    source_risk_label: str
+    editorial_template: str
     campaign_brief_id: UUID | None = None
     clip_count: int
     min_length_sec: int
@@ -88,8 +153,12 @@ class ProjectResponse(BaseModel):
 
 class ProjectListItem(BaseModel):
     id: UUID
+    title: str | None = None
     source_type: str
     source_value: str
+    rights_basis: str
+    source_risk_label: str
+    editorial_template: str
     clip_count: int
     status: str
     created_at: datetime
@@ -101,17 +170,18 @@ class ProjectListItem(BaseModel):
 # ============================================
 # Clips
 # ============================================
-
-
 class ClipResponse(BaseModel):
     id: UUID
     project_id: UUID
     start_sec: float
     end_sec: float
     score: float | None = None
+    transformation_score: int | None = None
+    transformation_breakdown: dict | None = None
     reasoning: str | None = None
     file_url: str | None = None
     thumbnail_url: str | None = None
+    render_manifest: dict | None = None
     review_status: str
     created_at: datetime
 
@@ -122,31 +192,25 @@ class ClipUpdate(BaseModel):
     review_status: str = Field(..., pattern="^(pending|approved|rejected)$")
 
 
+class ReclipRequest(BaseModel):
+    clip_count: int = Field(default=5, ge=1, le=20)
+    custom_prompt: str | None = Field(default=None, description="Guidance for new clips")
+    time_range_start: float | None = Field(default=None, description="Start time in seconds")
+    time_range_end: float | None = Field(default=None, description="End time in seconds")
+
+
 class ThumbnailRequest(BaseModel):
-    text: str | None = Field(None, description="Optional text to overlay on the thumbnail")
-    style: str | None = Field("minimal", description="Visual style of the text overlay (bold, minimal, gradient)")
+    text: str | None = Field(default=None, description="Optional custom title or text to burn onto thumbnail")
 
 
-# ============================================
-# Generic
-# ============================================
+class ExportRequest(BaseModel):
+    export_path: str = Field(..., min_length=1, description="Absolute folder path to save approved clips into")
+    acknowledged_risks: bool = Field(
+        default=False,
+        description="Mandatory user acknowledgment that ClipForge outputs are editorial edits and not a copyright clearance guarantee.",
+    )
 
 
 class MessageResponse(BaseModel):
     message: str
-    detail: str | None = None
-
-
-class ExportRequest(BaseModel):
-    export_path: str = Field(..., description="Absolute path on the host machine to export clips to")
-
-
-class ReclipRequest(BaseModel):
-    clip_count: int = Field(default=5, ge=1, le=50)
-    min_length_sec: int = Field(default=20, ge=5, le=300)
-    max_length_sec: int = Field(default=60, ge=10, le=600)
-    aspect_ratio: str = Field(default="9:16", pattern="^(9:16|1:1|16:9)$")
-    caption_style: str = Field(default="bold_karaoke")
-    custom_prompt: str | None = Field(default=None, description="Optional custom prompt to guide clip selection")
-    time_range_start: float | None = Field(default=None, description="Optional start time in seconds")
-    time_range_end: float | None = Field(default=None, description="Optional end time in seconds")
+    details: dict[str, Any] | None = None

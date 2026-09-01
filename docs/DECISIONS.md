@@ -103,13 +103,23 @@ after multi-tenant scale becomes a real operational bottleneck.
 
 ---
 
-## ADR-007: Hardware Requirements
+## ADR-007: Hardware Requirements & Optimization Profile
 
 **Date:** 2026-09-01
-**Status:** Pending — founder will provide specs before Phase 2
+**Status:** Accepted — Configured for AMD Ryzen 7 + 32GB RAM + AMD GPU
 
-Phase 1 is CPU-only. No mandatory GPU/CUDA dependencies.
-Founder will confirm RAM, CPU, GPU model/VRAM, and OS before Phase 2.
+### Hardware Profile
+- **Device:** MSI Alpha 15 A3DD (Windows 11 64-bit)
+- **CPU:** AMD Ryzen 7 3750H (4 cores / 8 threads @ 2.30 GHz)
+- **RAM:** 32.0 GB (High memory headroom for parallel worker queues)
+- **GPU:** AMD Radeon (6 GB VRAM, multiple GPUs)
+- **Storage:** Local NVMe SSD
+
+### Architecture Decisions for this Profile
+1. **Transcription (`faster-whisper`):** Run on CPU using `int8` quantization and 4 compute threads. CTranslate2 CPU engine is highly optimized for AMD Ryzen AVX2 instruction sets.
+2. **Face/Subject Tracking (`MediaPipe`):** Run on CPU using OpenCV / MediaPipe Lite/Full models.
+3. **Local TTS (`Kokoro`):** Run on CPU via ONNX Runtime / Torch CPU.
+4. **Storage Retention:** Implement automatic local cleanup for raw downloads and temporary cut files after project render.
 
 ---
 
