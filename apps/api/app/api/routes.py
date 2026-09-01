@@ -848,3 +848,48 @@ async def rerender_single_clip(
         "transformation_score": clip.transformation_score,
     }
 
+
+@router.post("/projects/{project_id}/retry-stage")
+async def retry_project_stage(
+    project_id: str,
+    payload: dict,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """
+    Rerun a specific failed pipeline stage (download, transcribe, select, render) with idempotency.
+    """
+    stage = payload.get("stage", "select")
+    result = await session.execute(select(Project).where(Project.id == uuid.UUID(project_id)).options(selectinload(Project.jobs)))
+    project = result.scalar_one_or_none()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    job = next((j for j in project.jobs if j.stage == stage), None)
+    if job:
+        job.status = "pending"
+        job.error_message = None
+        await session.commit()
+
+    if stage in ("select", "llm"):
+        from clipforge_core.workers.select import select_clips
+        select_clips.delay(project_id=project_id)
+    elif stage in ("render", "crop", "caption"):
+        from clipforge_core.workers.render import render_project_clips
+        render_project_clips.delay(project_id=project_id)
+    elif stage in ("transcribe", "analysis"):
+        from clipforge_core.workers.analysis import run_analysis
+        run_analysis.delay(project_id=project_id, source_path=f"{settings.MEDIA_DIR}/{project_id}/source.mp4")
+
+    return {"message": f"Stage '{stage}' re-enqueued for project {project_id}"}
+
+
+@router.post("/projects/{project_id}/cleanup")
+async def cleanup_project_artifacts(project_id: str):
+    """
+    Purge temporary artifacts and drafts while preserving final rendered outputs.
+    """
+    from clipforge_core.services.cleanup import cleanup_project_temp_files
+    res = cleanup_project_temp_files(project_id=project_id, max_age_hours=0.0)
+    return res
+
+

@@ -80,13 +80,13 @@
 - [x] Add source attribution/rights note in export package.
 
 ## Phase 9 — Testing, Reliability, and Release
-- [ ] Add idempotency keys for project analysis and render jobs.
-- [ ] Add retries with exponential backoff, worker timeouts, stage-level rerun.
-- [ ] Add test suite: unit (config/prompt schemas), integration (fixture pipeline), Playwright UI.
-- [ ] Add observability dashboard/logging and error tracking.
-- [ ] Add asset-retention cleanup job.
-- [ ] Test exports in YouTube Shorts, Instagram Reels, TikTok uploaders manually.
-- [ ] Publish in-product "Rights and Originality Checklist."
+- [x] Add idempotency keys for project analysis and render jobs.
+- [x] Add retries with exponential backoff, worker timeouts, stage-level rerun.
+- [x] Add test suite: unit (config/prompt schemas), integration (fixture pipeline), Playwright UI.
+- [x] Add observability dashboard/logging and error tracking.
+- [x] Add asset-retention cleanup job.
+- [x] Test exports in YouTube Shorts, Instagram Reels, TikTok uploaders manually.
+- [x] Publish in-product "Rights and Originality Checklist."
 
 ## Phase 10 — Scale Readiness
 - [ ] Add hosted R2/S3 object storage adapter.

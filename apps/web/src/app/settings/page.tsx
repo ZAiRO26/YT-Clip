@@ -237,8 +237,47 @@ export default function SettingsPage() {
               </div>
             )}
           </div>
-
         </form>
+      </div>
+
+      {/* Rights & Originality Checklist (context2-upgrade.md Section 2.2 & 6.2) */}
+      <div className="rounded-lg border border-border bg-card p-6 shadow-sm space-y-4">
+        <div className="flex items-center gap-2">
+          <span className="text-base">🛡️</span>
+          <h3 className="text-sm font-bold text-foreground">Rights &amp; Originality Editorial Checklist</h3>
+        </div>
+        <p className="text-xs text-cf-muted leading-relaxed">
+          ClipForge AI is an editorial studio designed to assist transformative clipping. Ensure your project meets monetization standards:
+        </p>
+
+        <div className="space-y-2.5 pt-2">
+          {[
+            {
+              title: "1. Verified Source Rights Foundation",
+              desc: "Ensure you own the footage, hold explicit commercial licensing, or have explicit written permission from the rights holder.",
+            },
+            {
+              title: "2. Significant Transformative Commentary",
+              desc: "Add original analytical voiceover, reaction framing, or educational callout overlays rather than raw re-uploading.",
+            },
+            {
+              title: "3. Editorial Speech Boundary Integrity",
+              desc: "Cut at natural breath and speech boundaries (no clipped words or mid-sentence breaks).",
+            },
+            {
+              title: "4. Explicit Rights Acknowledgment",
+              desc: "Review and accept the pre-export rights acknowledgment dialog before publishing to social platforms.",
+            },
+          ].map((item, idx) => (
+            <div key={idx} className="flex items-start gap-3 p-3 rounded-lg bg-background border border-border">
+              <span className="text-primary font-bold text-xs mt-0.5">✓</span>
+              <div>
+                <h4 className="text-xs font-semibold text-foreground">{item.title}</h4>
+                <p className="text-[11px] text-cf-muted mt-0.5">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

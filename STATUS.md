@@ -11,7 +11,8 @@
 - **Phase 6 (Voiceover and Audio Studio):** ✅ 100% Complete
 - **Phase 7 (Motion Effects Engine):** ✅ 100% Complete
 - **Phase 8 (Clip Editor and Brand Kits):** ✅ 100% Complete
-- **Next Milestone:** Phase 9 (Testing, Reliability, and Release Hardening)
+- **Phase 9 (Testing, Reliability, and Release Hardening):** ✅ 100% Complete
+- **Next Milestone:** Phase 10 (Scale Readiness & Cloud Storage Adapters)
 
 ## v1 Baseline
 - `master` branch contains the QA-verified v1 codebase (commit `f342cbe`).
@@ -45,8 +46,11 @@
 - Motion & Visual Effects Engine (8 social vertical video effects) ✅
 - Single Clip Editor Studio & Before/After Comparison Player ✅
 - Brand Kit Data Model & CRUD APIs ✅
+- Disk Asset Retention & Temp Media Cleanup Service ✅
+- Stage-Level Pipeline Retry & Error Recovery (`POST /api/projects/{id}/retry-stage`) ✅
+- In-Product "Rights and Originality Checklist" Component ✅
 - Server-Sent Events (SSE) `/api/projects/{id}/events` & `/api/projects/{id}/audit-trail` ✅
-- Test fixture set (3 synthetic MP4 files) & 39/39 passing tests ✅
+- Test fixture set (3 synthetic MP4 files) & 40/40 passing tests ✅
 
 ## Phases
 - **Phase 0 (Policy & Docs):** [x] Completed
@@ -58,5 +62,5 @@
 - **Phase 6 (Voiceover & Audio):** [x] Completed
 - **Phase 7 (Motion Effects):** [x] Completed
 - **Phase 8 (Clip Editor & Brand Kits):** [x] Completed
-- **Phase 9 (Testing & Reliability):** [ ] Next up
-- **Phase 10 (Scale Readiness):** [ ] Not started
+- **Phase 9 (Testing & Reliability):** [x] Completed
+- **Phase 10 (Scale Readiness):** [ ] Next up

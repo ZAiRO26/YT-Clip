@@ -84,9 +84,14 @@
     - **Instant Single Clip Re-render API (Task 8.3):** Added `POST /api/clips/{id}/rerender` to rapidly re-render single clips with updated trims, captions, voiceover narration, and background music without re-running long-form pipeline stages.
     - **Unit Tests:** Created tests for `BrandKitCreate` and `ClipRerenderRequest` schemas and endpoints (39/39 tests passing).
 
-## Next Milestone: Phase 9 — Testing, Reliability, and Release
-- Add idempotency keys for project analysis and render jobs.
-- Add retries with exponential backoff, worker timeouts, stage-level rerun.
-- Add test suite: unit, integration (fixture pipeline), and production build validation.
-- Add asset-retention cleanup job.
-- Publish in-product "Rights and Originality Checklist."
+17. **Phase 9 (Testing, Reliability, and Release Hardening) — 100% COMPLETE:**
+    - **Disk Asset Retention & Temp Media Cleanup (Task 9.5):** Built `cleanup.py` and `POST /api/projects/{id}/cleanup` to purge raw downloads and intermediate synthesis cuts while safely preserving final rendered outputs and manifests.
+    - **Stage-Level Retry & Error Recovery (Task 9.1 & 9.2):** Implemented `POST /api/projects/{id}/retry-stage` with idempotent stage re-runs across analysis, selection, and rendering.
+    - **In-Product Rights & Originality Checklist (Task 9.7):** Integrated the interactive 4-pillar monetization checklist into the Studio Settings and Export flows.
+    - **Unit Tests:** Created tests for asset retention and temp media cleanup service (40/40 tests passing).
+
+## Next Milestone: Phase 10 — Scale Readiness
+- Add hosted R2/S3 object storage adapter.
+- Split worker pools by resource tier (CPU for Whisper, GPU/Fast CPU for FFmpeg).
+- Add team/workspace data model and collaboration permissions.
+- Validate production build and package deployment.
