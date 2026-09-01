@@ -741,11 +741,12 @@ async def rerender_single_clip(
     without re-running upstream download and transcription.
     """
     from pathlib import Path
-    from clipforge_core.services.render_engine import render_clip, build_render_manifest
-    from clipforge_core.services.tts_service import synthesize_voiceover
-    from clipforge_core.services.music_library import ensure_synth_bed
+
     from clipforge_core.services.audio_mixer import mix_audio_tracks
+    from clipforge_core.services.music_library import ensure_synth_bed
+    from clipforge_core.services.render_engine import render_clip
     from clipforge_core.services.transformation_scorer import calculate_transformation_score
+    from clipforge_core.services.tts_service import synthesize_voiceover
 
     result = await session.execute(select(Clip).where(Clip.id == uuid.UUID(clip_id)).options(selectinload(Clip.project)))
     clip = result.scalar_one_or_none()
@@ -792,7 +793,7 @@ async def rerender_single_clip(
         analysis_data = json.loads(analysis_file.read_text(encoding="utf-8"))
         segments = analysis_data.get("transcript", {}).get("segments", [])
 
-    render_res = render_clip(
+    render_clip(
         source_path=source_video,
         output_path=out_video_path,
         start_sec=start_sec,
