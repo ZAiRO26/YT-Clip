@@ -48,7 +48,8 @@ def build_render_manifest(
     src_h = source_probe.get("height", 1080)
     crop_w_px = int(src_h * 9 / 16)  # 9:16 crop width from source height
     crop_h_px = src_h
-    crop_x_px = int(max(0, src_w - crop_w_px) * max(0.0, min(1.0, focal_x)))
+    face_center_x = max(0.0, min(1.0, focal_x)) * src_w
+    crop_x_px = int(max(0, min(src_w - crop_w_px, face_center_x - (crop_w_px / 2.0))))
     crop_y_px = 0
 
     # Map editorial template if needed
@@ -232,13 +233,14 @@ def render_clip(
         # 9:16 Smart Crop / Reframe with focal_x
         # Crop width for 9:16 from height H is H * 9/16
         crop_w = int(src_h * 9.0 / 16.0)
-        # Calculate X offset based on focal_x
+        face_center_x = max(0.0, min(1.0, focal_x)) * src_w
         max_x = max(0, src_w - crop_w)
-        x_offset = int(max_x * max(0.0, min(1.0, focal_x)))
+        x_offset = int(max(0, min(max_x, face_center_x - (crop_w / 2.0))))
 
         video_filters = (
             f"crop={crop_w}:{src_h}:{x_offset}:0,"
-            f"scale=1080:1920:flags=lanczos{ass_filter}"
+            f"scale=1080:1920:force_original_aspect_ratio=decrease,"
+            f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2{ass_filter}"
         )
 
     # 3. Audio Filter Graph: loudnorm to -14 LUFS for YouTube Shorts / TikTok

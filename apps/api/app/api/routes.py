@@ -877,11 +877,41 @@ async def rerender_single_clip(
     end_sec = float(payload.get("end_sec", clip.end_sec))
     caption_style = payload.get("caption_style", "bold_karaoke")
     crop_mode = payload.get("crop_mode", "face_track")
-    focal_x = float(payload.get("focal_x", 0.5))
     voiceover_text = payload.get("voiceover_text")
     voice_id = payload.get("voice_id", "en-US-JennyNeural")
     music_track = payload.get("music_track")
     raw_effects = payload.get("effects", [])
+
+    # Load transcript segments and face tracking if available
+    analysis_file = project_dir / "analysis.json"
+    segments = []
+    focal_x = 0.5
+
+    if "focal_x" in payload and payload["focal_x"] is not None:
+        focal_x = float(payload["focal_x"])
+    elif crop_mode == "face_track" and analysis_file.exists():
+        try:
+            import json
+            analysis_data = json.loads(analysis_file.read_text(encoding="utf-8"))
+            segments = analysis_data.get("transcript", {}).get("segments", [])
+            focal_timeline = analysis_data.get("face_tracking", {}).get("timeline", [])
+            clip_pts = [
+                f["focal_x"] for f in focal_timeline
+                if start_sec <= f.get("time_sec", 0.0) <= end_sec
+            ]
+            if clip_pts:
+                focal_x = sum(clip_pts) / len(clip_pts)
+            else:
+                focal_x = float(analysis_data.get("face_tracking", {}).get("average_focal_x", 0.5))
+        except Exception:
+            focal_x = 0.5
+    elif analysis_file.exists():
+        try:
+            import json
+            analysis_data = json.loads(analysis_file.read_text(encoding="utf-8"))
+            segments = analysis_data.get("transcript", {}).get("segments", [])
+        except Exception:
+            segments = []
 
     # Filter effects to active and verified effects (All 6 verified: film_grain, vignette, zoom, camera_shake, rgb_split, vhs_noise)
     active_effects = []
@@ -920,14 +950,6 @@ async def rerender_single_clip(
     if music_track and music_track != "none":
         bg_music_path = clips_dir / f"music_{clip.id}.aac"
         ensure_synth_bed(music_track, bg_music_path, duration_sec=end_sec - start_sec)
-
-    # Load transcript segments if available
-    analysis_file = project_dir / "analysis.json"
-    segments = []
-    if analysis_file.exists():
-        import json
-        analysis_data = json.loads(analysis_file.read_text(encoding="utf-8"))
-        segments = analysis_data.get("transcript", {}).get("segments", [])
 
     render_clip(
         source_path=source_video,
