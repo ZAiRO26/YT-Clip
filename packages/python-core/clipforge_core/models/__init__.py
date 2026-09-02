@@ -71,6 +71,7 @@ class Project(Base):
     crop_mode = Column(Text, nullable=False, server_default=text("'face_track'"))
     default_effects = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     default_voice_id = Column(Text, nullable=False, server_default=text("'af_bella'"))
+    default_music_track = Column(Text, nullable=False, server_default=text("'none'"))
 
     # Rights & Transformation Policy (v2)
     rights_basis = Column(Text, nullable=False, server_default=text("'owned'"))

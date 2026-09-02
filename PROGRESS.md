@@ -187,3 +187,11 @@
     - **Descriptive File Organization:** [x] Copies clips with sequential numbered filenames (`01_Clip_Title.mp4`), thumbnails (`01_Clip_Title_thumb.jpg`), and generated `export_manifest.json`.
     - **Settings Integration:** [x] Wired project export modal to automatically read `export_path` from `/api/settings` on load.
     - **Verification:** [x] 55/55 Python tests passing with 100% success; Next.js 16 build passing with 0 errors across all routes.
+
+ 31. **Session 10 (Ambient Background Music & Sidechain Compression Studio):**
+    - **5 Royalty-Free Ambient Music Beds:** [x] Integrated `ambient_focus`, `lofi_beats`, `upbeat_tech`, and `epic_cinematic` with synthetic audio generation via `music_library.py`.
+    - **Dynamic Sidechain Compression:** [x] Built $-12\text{ dB}$ dynamic audio ducking with broadcast-standard ($-14.0\text{ LUFS}$) EBU R128 mastering via `audio_mixer.py`.
+    - **Project Creation UI (`/new`):** [x] Added Section 4E Ambient Background Music selector to the Brand Styling Kit.
+    - **Clip Studio UI (`/clip/[id]`):** [x] Added Section 5 Ambient Background Music controls with live track selection and re-render mixing.
+    - **Alembic Migration:** [x] Added `default_music_track` column to `projects` table via migration `6f1a892cb310`.
+    - **Verification:** [x] 55/55 Python tests passing, clean Next.js build, and verified live via browser smoke test.

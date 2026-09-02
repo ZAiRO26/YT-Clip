@@ -130,6 +130,7 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
         crop_mode = getattr(project, "crop_mode", "face_track") or "face_track"
         caption_style = project.caption_style or "bold_karaoke"
         default_effects = getattr(project, "default_effects", []) or []
+        default_music_track = getattr(project, "default_music_track", "none") or "none"
         editorial_template = project.editorial_template or "explainer"
         rights_basis = project.rights_basis or "owned"
         source_risk_label = project.source_risk_label or "lower_workflow_risk"
@@ -157,6 +158,8 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
             })
 
     from clipforge_core.services.effects_engine import apply_motion_effects
+    from clipforge_core.services.audio_mixer import mix_audio_tracks
+    from clipforge_core.services.music_library import ensure_synth_bed
 
     clips_output_dir = project_dir / "clips"
     clips_output_dir.mkdir(parents=True, exist_ok=True)
@@ -204,6 +207,41 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                     effects=active_effects,
                     duration_sec=end_s - start_s,
                 )
+
+            # Apply project-wide ambient background music if selected
+            if default_music_track and default_music_track != "none":
+                try:
+                    import os
+                    import subprocess
+                    bg_music_path = clips_output_dir / f"music_{idx + 1}.aac"
+                    ensure_synth_bed(default_music_track, bg_music_path, duration_sec=end_s - start_s)
+
+                    mixed_audio = clips_output_dir / f"mixed_{idx + 1}.aac"
+                    mix_audio_tracks(
+                        source_video_path=out_video_path,
+                        output_audio_path=mixed_audio,
+                        start_sec=0.0,
+                        end_sec=end_s - start_s,
+                        music_path=bg_music_path,
+                    )
+
+                    temp_muxed = clips_output_dir / f"clip_{idx + 1}_muxed_temp.mp4"
+                    mux_cmd = [
+                        "ffmpeg", "-y",
+                        "-i", str(out_video_path),
+                        "-i", str(mixed_audio),
+                        "-map", "0:v:0",
+                        "-map", "1:a:0",
+                        "-c:v", "copy",
+                        "-c:a", "aac",
+                        "-b:a", "192k",
+                        "-movflags", "+faststart",
+                        str(temp_muxed),
+                    ]
+                    subprocess.run(mux_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+                    os.replace(temp_muxed, out_video_path)
+                except Exception as e:
+                    logger.warning(f"[Render Worker] Failed to mix default background music for clip {idx + 1}: {e}")
 
             # Build and write Render Manifest
             manifest = build_render_manifest(

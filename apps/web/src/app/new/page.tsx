@@ -32,6 +32,7 @@ export default function NewProjectPage() {
   const [captionStyle, setCaptionStyle] = useState("bold_karaoke");
   const [selectedEffects, setSelectedEffects] = useState<string[]>([]);
   const [voiceId, setVoiceId] = useState("af_bella");
+  const [defaultMusicTrack, setDefaultMusicTrack] = useState("none");
   const [selectedBriefId, setSelectedBriefId] = useState<string | "">("");
 
   // Time & Selection Customization
@@ -120,6 +121,7 @@ export default function NewProjectPage() {
         caption_style: captionStyle,
         default_effects: selectedEffects.map((e) => ({ id: e, intensity: 0.5 })),
         default_voice_id: voiceId,
+        default_music_track: defaultMusicTrack,
       };
 
       if (customPrompt.trim()) {
@@ -520,6 +522,39 @@ export default function NewProjectPage() {
                 <option value="am_michael">Michael — Deep &amp; Resonant (US Male)</option>
                 <option value="af_nicole">Nicole — Soft &amp; Conversational (US Female)</option>
               </select>
+            </div>
+
+            {/* 4E: Ambient Background Music */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-cf-muted">Ambient Background Music Bed</label>
+                <span className="text-[10px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded">
+                  🎵 Sidechain Ducking (-12dB)
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                {[
+                  { id: "none", label: "🚫 No Music", desc: "Keep original audio clean" },
+                  { id: "ambient_focus", label: "🧘 Ambient Focus", desc: "Subtle minimal harmony" },
+                  { id: "lofi_beats", label: "☕ Chill Lo-Fi", desc: "Warm hip-hop groove" },
+                  { id: "upbeat_tech", label: "⚡ Upbeat Tech", desc: "High energy & punchy" },
+                  { id: "epic_cinematic", label: "🎬 Cinematic Tension", desc: "Dramatic orchestral build" },
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setDefaultMusicTrack(m.id)}
+                    className={`p-2.5 rounded-lg border text-left transition-all ${
+                      defaultMusicTrack === m.id
+                        ? "border-primary bg-primary/10 ring-1 ring-primary/50 text-primary"
+                        : "border-border bg-card text-cf-muted hover:border-border/80"
+                    }`}
+                  >
+                    <span className="text-xs font-semibold block">{m.label}</span>
+                    <span className="text-[10px] text-cf-muted block mt-0.5">{m.desc}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 

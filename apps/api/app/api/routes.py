@@ -170,6 +170,7 @@ async def create_project(
         caption_style=data.caption_style,
         default_effects=data.default_effects,
         default_voice_id=data.default_voice_id,
+        default_music_track=data.default_music_track,
         status="queued",
     )
     session.add(project)

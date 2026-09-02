@@ -394,6 +394,38 @@ export default function ClipEditorPage() {
             </div>
           </section>
 
+          {/* Section 5: Ambient Background Music */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-primary uppercase tracking-wider">5. Ambient Background Music</h3>
+              <span className="text-[10px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded">
+                🎵 Dynamic Ducking (-12dB)
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[
+                { id: "none", label: "🚫 No Music", desc: "Keep raw video audio" },
+                { id: "ambient_focus", label: "🧘 Ambient Focus", desc: "Subtle minimal bed" },
+                { id: "lofi_beats", label: "☕ Chill Lo-Fi", desc: "Warm hip-hop groove" },
+                { id: "upbeat_tech", label: "⚡ Upbeat Tech", desc: "High energy & punchy" },
+                { id: "epic_cinematic", label: "🎬 Cinematic Tension", desc: "Dramatic build" },
+              ].map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setMusicTrack(m.id)}
+                  className={`p-2.5 rounded-lg border text-left transition-all ${
+                    musicTrack === m.id
+                      ? "bg-primary/15 border-primary text-primary shadow-sm"
+                      : "bg-background border-border text-foreground hover:border-white/20"
+                  }`}
+                >
+                  <p className="text-xs font-semibold">{m.label}</p>
+                  <p className="text-[10px] text-cf-muted mt-0.5">{m.desc}</p>
+                </button>
+              ))}
+            </div>
+          </section>
+
           {/* Section 6: Motion & Visual Effects */}
           <section className="space-y-3">
             <div className="flex items-center justify-between">

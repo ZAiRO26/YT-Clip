@@ -113,6 +113,7 @@ class ProjectCreate(BaseModel):
     caption_style: str = Field(default="bold_karaoke", description="Caption typography preset")
     default_effects: list[dict[str, Any]] = Field(default_factory=list, description="Default motion effect layers")
     default_voice_id: str = Field(default="af_bella", description="Default Kokoro voice persona")
+    default_music_track: str = Field(default="none", description="Default ambient background music bed")
     custom_prompt: str | None = Field(default=None, description="Optional custom prompt to guide clip selection")
     time_range_start: float | None = Field(default=None, description="Optional start time in seconds")
     time_range_end: float | None = Field(default=None, description="Optional end time in seconds")
@@ -150,6 +151,7 @@ class ProjectResponse(BaseModel):
     caption_style: str = "bold_karaoke"
     default_effects: list[dict[str, Any]] = Field(default_factory=list)
     default_voice_id: str = "af_bella"
+    default_music_track: str = "none"
     status: str
     created_at: datetime
     jobs: list[JobStatus] = []

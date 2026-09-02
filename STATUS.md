@@ -53,7 +53,12 @@
   - **Dedicated Project Subfolders:** Automatically generates project subfolders (`D:\TestExport\Project_Title\`) with sequential numbered filenames (`01_Clip_Title.mp4`), thumbnails, and JSON manifests.
   - **Settings Integration:** Auto-populates export destination in project export modal from `/api/settings`.
   - **Verification:** 55/55 Python tests passing, Next.js production build compiling clean.
-- **Overall v2 Upgrade Roadmap:** ✅ Sprints A through D, Post-Beta Polish, Unified Project Styling, Open-Source Launch Package & Direct Local Export Engine Complete. Production Ready.
+- **Session 10 (Ambient Background Music & Sidechain Compression Studio):** ✅ 100% Complete
+  - **5 Ambient Music Beds:** Added royalty-free ambient beds (*Ambient Focus, Chill Lo-Fi, Upbeat Tech, Cinematic Tension, None*).
+  - **Dynamic Sidechain Ducking:** Ducking background music by $-12\text{ dB}$ under speech with $-14\text{ LUFS}$ EBU R128 loudness normalization.
+  - **UI Integration:** Wired Section 4E into Project Creation (`/new`) and Section 5 into Clip Studio (`/clip/[id]`).
+  - **Verification:** 55/55 Python tests passing, Next.js build clean, and browser smoke test verified.
+- **Overall v2 Upgrade Roadmap:** ✅ Sprints A through D, Post-Beta Polish, Unified Project Styling, Open-Source Launch Package, Direct Local Export Engine & Ambient Music Studio Complete. Production Ready.
 
 ## v1 Baseline
 - `master` branch contains the QA-verified v1 codebase (commit `f342cbe`).
