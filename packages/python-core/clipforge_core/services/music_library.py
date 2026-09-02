@@ -52,6 +52,7 @@ MUSIC_TRACKS: List[Dict[str, Any]] = [
 def ensure_synth_bed(track_id: str, output_path: str | Path, duration_sec: float = 60.0) -> Path:
     """
     Generates a synthetic ambient audio bed if pre-bundled MP3 is not present.
+    Uses multi-oscillator chord progressions, rhythmic pulses, and subtle textures.
     """
     out_path = Path(output_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -59,26 +60,42 @@ def ensure_synth_bed(track_id: str, output_path: str | Path, duration_sec: float
     if track_id == "none":
         return out_path
 
-    # Synthesize soft harmonic sine/pink-noise ambient bed with subtle vibrato
-    # Frequencies: ambient_focus=220Hz (A3), lofi_beats=196Hz (G3), upbeat_tech=261.63Hz (C4), epic_cinematic=146.83Hz (D3)
-    base_freqs = {
-        "ambient_focus": 220.0,
-        "lofi_beats": 196.0,
-        "upbeat_tech": 261.63,
-        "epic_cinematic": 146.83,
-    }
-    freq = base_freqs.get(track_id, 220.0)
+    # Rich harmonic multi-oscillator synthesizer definitions per mood
+    if track_id == "lofi_beats":
+        # Warm Dmin7 jazzy chord + rhythmic pulse + tape texture
+        filter_str = (
+            "sine=f=146.83:r=44100[s1];sine=f=174.61:r=44100[s2];sine=f=220.0:r=44100[s3];sine=f=261.63:r=44100[s4];"
+            "anoisesrc=c=pink:r=44100:a=0.012[nz];"
+            "[s1][s2][s3][s4][nz]amix=inputs=5:normalize=0,volume=0.45,tremolo=f=1.5:d=0.55,flanger=delay=4:depth=2,lowpass=f=1600[aout]"
+        )
+    elif track_id == "upbeat_tech":
+        # Modern electronic tech pulse with 4-on-the-floor 3.5Hz rhythmic gate
+        filter_str = (
+            "sine=f=130.81:r=44100[s1];sine=f=196.0:r=44100[s2];sine=f=261.63:r=44100[s3];sine=f=329.63:r=44100[s4];"
+            "[s1][s2][s3][s4]amix=inputs=4:normalize=0,volume=0.45,tremolo=f=3.5:d=0.75,chorus=0.7:0.9:45:0.4:0.3:2[aout]"
+        )
+    elif track_id == "epic_cinematic":
+        # Deep cinematic brass + strings 5th power chord with low drone
+        filter_str = (
+            "sine=f=82.41:r=44100[s1];sine=f=123.47:r=44100[s2];sine=f=164.81:r=44100[s3];sine=f=246.94:r=44100[s4];"
+            "[s1][s2][s3][s4]amix=inputs=4:normalize=0,volume=0.5,tremolo=f=0.4:d=0.45,lowpass=f=1100[aout]"
+        )
+    else:  # ambient_focus
+        # Lush ambient pad with chorus and subtle tremolo (Cmaj7 / Am9)
+        filter_str = (
+            "sine=f=220.0:r=44100[s1];sine=f=277.18:r=44100[s2];sine=f=329.63:r=44100[s3];sine=f=440.0:r=44100[s4];"
+            "[s1][s2][s3][s4]amix=inputs=4:normalize=0,volume=0.4,tremolo=f=0.6:d=0.35,chorus=0.7:0.9:55:0.4:0.25:2,lowpass=f=1400[aout]"
+        )
 
     cmd = [
         "ffmpeg",
         "-y",
-        "-f", "lavfi",
-        "-i", f"sine=frequency={freq}:sample_rate=44100",
+        "-filter_complex", filter_str,
+        "-map", "[aout]",
         "-t", str(duration_sec),
-        "-af", "volume=0.08,lowpass=f=800",
         "-c:a", "aac",
-        "-b:a", "128k",
+        "-b:a", "192k",
         str(out_path),
     ]
-    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
+    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20)
     return out_path

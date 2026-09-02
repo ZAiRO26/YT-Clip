@@ -16,6 +16,7 @@ interface ClipDetail {
   reasoning: string | null;
   file_url: string | null;
   thumbnail_url: string | null;
+  render_manifest?: Record<string, any> | null;
   review_status: string;
 }
 
@@ -50,6 +51,9 @@ export default function ClipEditorPage() {
         setClip(found);
         setStartSec(found.start_sec);
         setEndSec(found.end_sec);
+        if (found.render_manifest?.music_track) {
+          setMusicTrack(found.render_manifest.music_track);
+        }
       }
     } catch (e) {
       toast.error("Failed to load clip details");

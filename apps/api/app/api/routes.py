@@ -1002,9 +1002,11 @@ async def rerender_single_clip(
         transformation_score=clip.transformation_score or 75,
         transformation_breakdown=clip.transformation_breakdown or {},
         effect_layers=active_effects,
-        audio_mode="mix" if vo_path else "original_only",
+        audio_mode="mix" if (vo_path or bg_music_path) else "original_only",
         voiceover_asset_id=vo_asset_id,
     )
+    if music_track and music_track != "none":
+        manifest["music_track"] = music_track
     manifest_path = clips_dir / f"clip_{clip.id}_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
@@ -1025,6 +1027,7 @@ async def rerender_single_clip(
     clip.end_sec = end_sec
     clip.file_url = rel_file
     clip.thumbnail_url = rel_thumb
+    clip.render_manifest = manifest
     clip.transformation_score = t_data["score"]
     clip.transformation_breakdown = t_data["breakdown"]
 

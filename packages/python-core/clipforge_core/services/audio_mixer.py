@@ -19,7 +19,7 @@ def mix_audio_tracks(
     voiceover_path: str | Path | None = None,
     music_path: str | Path | None = None,
     voiceover_delay_sec: float = 0.5,
-    music_volume_db: float = -22.0,
+    music_volume_db: float = -14.0,
     source_duck_db: float = -12.0,
 ) -> Dict[str, Any]:
     """
