@@ -502,13 +502,17 @@ async def export_project_clips(
     data: ExportRequest,
     session: AsyncSession = Depends(get_async_session),
 ):
-    """Export approved clips to a local path."""
+    """Export approved clips to a dedicated local subfolder under the export destination."""
+    import json
+    import re
     import shutil
     from pathlib import Path
+    from sqlalchemy import text
 
     # Verify project exists
     proj_result = await session.execute(select(Project).where(Project.id == project_id))
-    if not proj_result.scalar_one_or_none():
+    project = proj_result.scalar_one_or_none()
+    if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
     # Get approved clips
@@ -523,59 +527,118 @@ async def export_project_clips(
     if not approved_clips:
         raise HTTPException(status_code=400, detail="No approved clips to export")
 
-    export_dir = Path(data.export_path)
+    # Determine base export path (fallback to settings table if not provided)
+    base_export_str = data.export_path.strip() if data.export_path else ""
+    if not base_export_str:
+        try:
+            settings_res = await session.execute(text("SELECT value FROM settings WHERE key = 'export_path'"))
+            row = settings_res.fetchone()
+            if row and row[0]:
+                base_export_str = row[0].strip('"').strip()
+        except Exception:
+            pass
+
+    if not base_export_str:
+        base_export_str = "C:\\ClipForgeExports"
+
+    base_export_dir = Path(base_export_str)
+
+    # Sanitize project title for a fresh dedicated folder
+    raw_title = project.title or f"Project_{str(project_id)[:8]}"
+    safe_folder_name = re.sub(r'[\\/*?:"<>|]', "", raw_title).strip().replace(" ", "_")[:60]
+    if not safe_folder_name:
+        safe_folder_name = f"Project_{str(project_id)[:8]}"
+
+    target_export_dir = base_export_dir / safe_folder_name
     try:
-        export_dir.mkdir(parents=True, exist_ok=True)
+        target_export_dir.mkdir(parents=True, exist_ok=True)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to create export directory: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to create export directory '{target_export_dir}': {e}")
 
     exported_count = 0
     errors = []
+    exported_manifest_items = []
 
-    # file_url in DB looks like "media\<uuid>\clips\clip_000_final.mp4"
-    # MEDIA_DIR is "./media"
-    # Strip the leading "media/" or "media\" prefix so we get "<uuid>/clips/..."
-    # Then join with MEDIA_DIR to get the real on-disk path.
     media_base = Path(settings.MEDIA_DIR).resolve()
 
-    for clip in approved_clips:
+    for idx, clip in enumerate(approved_clips):
         try:
-            # Normalize backslashes
+            # Normalize backslashes and strip media prefix
             rel_url = clip.file_url.replace("\\", "/")
-            # Strip leading "media/" prefix if present
             if rel_url.startswith("media/"):
                 rel_url = rel_url[len("media/") :]
 
             source_path = media_base / rel_url
 
             if source_path.exists():
-                dest_path = export_dir / f"project_{project_id}_clip_{exported_count + 1}.mp4"
+                clip_title_raw = clip.title or f"clip_{idx + 1}"
+                safe_clip_title = re.sub(r'[\\/*?:"<>|]', "", clip_title_raw).strip().replace(" ", "_")[:50]
+                clip_filename = f"{exported_count + 1:02d}_{safe_clip_title}.mp4"
+                dest_path = target_export_dir / clip_filename
                 shutil.copy2(source_path, dest_path)
 
                 # Also copy thumbnail if it exists
+                thumb_filename = None
                 if clip.thumbnail_url:
                     thumb_rel = clip.thumbnail_url.replace("\\", "/")
                     if thumb_rel.startswith("media/"):
                         thumb_rel = thumb_rel[len("media/") :]
                     thumb_source = media_base / thumb_rel
                     if thumb_source.exists():
-                        thumb_dest = export_dir / f"project_{project_id}_clip_{exported_count + 1}_thumb.jpg"
+                        thumb_filename = f"{exported_count + 1:02d}_{safe_clip_title}_thumb.jpg"
+                        thumb_dest = target_export_dir / thumb_filename
                         shutil.copy2(thumb_source, thumb_dest)
+
+                exported_manifest_items.append({
+                    "clip_number": exported_count + 1,
+                    "clip_id": str(clip.id),
+                    "filename": clip_filename,
+                    "thumbnail": thumb_filename,
+                    "title": clip.title,
+                    "start_time": clip.start_time,
+                    "end_time": clip.end_time,
+                    "duration": round(clip.end_time - clip.start_time, 2) if (clip.end_time and clip.start_time) else None,
+                    "editorial_potential": clip.score,
+                    "transformation_score": clip.transformation_score,
+                    "hook_type": clip.hook_type,
+                    "reasoning": clip.reasoning,
+                })
 
                 exported_count += 1
             else:
-                errors.append(f"Source file not found: {source_path}")
+                errors.append(f"Source file not found for clip {clip.id}: {source_path}")
         except Exception as e:
             errors.append(f"Failed to export clip {clip.id}: {e}")
 
     if exported_count == 0:
         raise HTTPException(status_code=500, detail=f"Failed to export any clips. Errors: {errors}")
 
-    msg = f"Successfully exported {exported_count} clips to {export_dir}"
-    if errors:
-        msg += f" (with {len(errors)} errors)"
+    # Write export manifest JSON
+    try:
+        manifest_payload = {
+            "project_id": str(project.id),
+            "project_title": project.title,
+            "source_url": project.source_url,
+            "rights_basis": project.rights_basis,
+            "crop_mode": project.crop_mode,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "export_folder": str(target_export_dir),
+            "total_clips_exported": exported_count,
+            "clips": exported_manifest_items,
+        }
+        with open(target_export_dir / "export_manifest.json", "w", encoding="utf-8") as mf:
+            json.dump(manifest_payload, mf, indent=2)
+    except Exception as e:
+        logger.warning(f"Failed to write export manifest: {e}")
 
-    return MessageResponse(message=msg, detail="|".join(errors) if errors else None)
+    msg = f"Successfully exported {exported_count} clips to {target_export_dir}"
+    if errors:
+        msg += f" (with {len(errors)} warnings)"
+
+    return MessageResponse(
+        message=msg,
+        details={"export_folder": str(target_export_dir), "count": exported_count, "errors": errors}
+    )
 
 
 # ============================================

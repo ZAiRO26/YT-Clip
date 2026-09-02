@@ -307,11 +307,26 @@ export default function ProjectDetailPage() {
   const [ackNotClearance, setAckNotClearance] = useState(false);
   const [exportFolder, setExportFolder] = useState("C:\\ClipForgeExports");
 
+  // Load configured export path from settings on mount
+  useEffect(() => {
+    api.getSettings().then((s) => {
+      if (s.export_path) {
+        setExportFolder(s.export_path);
+      }
+    }).catch(() => {});
+  }, []);
+
   const handleExport = () => {
     if (clips.filter((c) => c.review_status === "approved").length === 0) {
       toast.error("No approved clips to export. Please approve at least one clip first.");
       return;
     }
+    // Refresh export path from settings before opening
+    api.getSettings().then((s) => {
+      if (s.export_path) {
+        setExportFolder(s.export_path);
+      }
+    }).catch(() => {});
     setShowExportModal(true);
   };
 
@@ -324,24 +339,8 @@ export default function ProjectDetailPage() {
     try {
       setExporting(true);
       const res = await api.exportProjectClips(projectId, exportFolder);
-      toast.success(res.message || "Export completed successfully");
+      toast.success(res.message || "Export completed successfully", { duration: 6000 });
       setShowExportModal(false);
-
-      // HIGH PRIORITY: Trigger automatic browser file download for each approved clip
-      const approvedClips = clips.filter((c) => c.review_status === "approved" && c.file_url);
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-      approvedClips.forEach((clip, index) => {
-        setTimeout(() => {
-          const downloadUrl = `${apiBase}/api/clips/${clip.id}/download`;
-          const a = document.createElement("a");
-          a.href = downloadUrl;
-          a.download = `clip_${clip.id}.mp4`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        }, index * 400);
-      });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to export clips");
     } finally {
@@ -809,8 +808,12 @@ export default function ProjectDetailPage() {
                 type="text"
                 value={exportFolder}
                 onChange={(e) => setExportFolder(e.target.value)}
+                placeholder="e.g. D:\MyVideos\Exports"
                 className="w-full rounded-lg bg-background border border-border px-3.5 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
               />
+              <p className="text-[11px] text-cf-muted mt-1.5 leading-relaxed">
+                📁 A dedicated subfolder named after this project will be automatically created inside this destination, saving all approved MP4 video clips, thumbnails, and the export manifest JSON.
+              </p>
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-2">

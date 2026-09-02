@@ -48,11 +48,12 @@
   - **Studio Action Labels (Item 2):** Clarified button distinction in Clip Studio (`/project/[id]/clip/[clipId]`) to "Save Metadata" (fast metadata save) vs. "Re-render Video (New Effects / Audio)".
   - **AUDIT-P1-05 Policy Compliance (Item 3):** Fully refactored candidate selection and ranking to canonical `editorial_potential` metric ($50\%$ weight alongside $50\%$ `transformation_score`). Updated prompt schema, candidate ranker formula, schemas, web tooltips, and unit tests with backward-compatible legacy fallbacks.
   - **Test Suite Verification:** 55/55 Python unit tests passing; Next.js 16 build passing with 0 errors across all routes.
-- **Session 8 (Launcher Optimization, Disk Reclamation & React Key Hardening):** ✅ 100% Complete
-  - **Scoped Docker Startup:** Constrained Docker Compose to `postgres redis minio`, eliminating all image build downloads and launching services in 1–2s.
-  - **Disk Space Restoration:** Compacted WSL2 VHDX and cleared updater/npm caches, recovering **+41 GB** of free space on C: drive (from 472 MB to 41.54 GB).
-  - **React Duplicate Key Fix:** Deduplicated models array with `Set` and composite indexed keys in `apps/web/src/app/settings/page.tsx`, eliminating all 51 React key warnings.
-- **Overall v2 Upgrade Roadmap:** ✅ Sprints A through D, Post-Beta Polish, Unified Project Styling, Open-Source Launch Package & Launcher Optimization Complete. Production Ready.
+- **Session 9 (Direct Local Export & Auto Subfolder Engine):** ✅ 100% Complete
+  - **Silent Local Export:** Replaced browser download loops with direct server-side file copy to the configured `export_path`, eliminating browser prompt popups.
+  - **Dedicated Project Subfolders:** Automatically generates project subfolders (`D:\TestExport\Project_Title\`) with sequential numbered filenames (`01_Clip_Title.mp4`), thumbnails, and JSON manifests.
+  - **Settings Integration:** Auto-populates export destination in project export modal from `/api/settings`.
+  - **Verification:** 55/55 Python tests passing, Next.js production build compiling clean.
+- **Overall v2 Upgrade Roadmap:** ✅ Sprints A through D, Post-Beta Polish, Unified Project Styling, Open-Source Launch Package & Direct Local Export Engine Complete. Production Ready.
 
 ## v1 Baseline
 - `master` branch contains the QA-verified v1 codebase (commit `f342cbe`).

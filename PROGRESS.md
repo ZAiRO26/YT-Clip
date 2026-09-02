@@ -180,3 +180,10 @@
     - **Launcher Docker Service Scoping:** [x] Refactored `start.bat`, `start-v2.bat`, and `start.sh` to explicitly target `postgres redis minio`, preventing accidental heavy image rebuilds and eliminating package downloads on startup.
     - **Disk Space Recovery:** [x] Created `scripts/reclaim_c_drive_space.bat`, compacted WSL2 VHDX virtual disk, and purged obsolete download/updater caches, recovering **+41 GB** of free space on C: drive (from 472 MB to 41.54 GB free).
     - **React Duplicate Key Elimination:** [x] Deduplicated model listings in `apps/web/src/app/settings/page.tsx` using `Array.from(new Set(...))` and composite indexed keys, completely resolving all 51 duplicate React key warnings.
+
+ 30. **Session 9 (Direct Local Export & Auto Subfolder Engine):**
+    - **Silent Local Export:** [x] Replaced browser sequential `<a download>` loop with direct server-side file copy to the configured local `export_path`, eliminating browser prompt popups.
+    - **Dedicated Project Subfolders:** [x] Updated `export_project_clips` in `routes.py` to automatically create a dedicated folder named after the project title (e.g. `D:\TestExport\Project_Title\`).
+    - **Descriptive File Organization:** [x] Copies clips with sequential numbered filenames (`01_Clip_Title.mp4`), thumbnails (`01_Clip_Title_thumb.jpg`), and generated `export_manifest.json`.
+    - **Settings Integration:** [x] Wired project export modal to automatically read `export_path` from `/api/settings` on load.
+    - **Verification:** [x] 55/55 Python tests passing with 100% success; Next.js 16 build passing with 0 errors across all routes.
