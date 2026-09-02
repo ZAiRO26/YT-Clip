@@ -15,7 +15,7 @@ echo ""
 
 # 1. Start Docker Infrastructure
 echo "[1/5] Starting Docker Infrastructure (Postgres 16, Redis 7, MinIO S3)..."
-docker compose -f infra/docker-compose.yml up -d
+docker compose -f infra/docker-compose.yml up -d postgres redis minio
 
 # 2. Run Database Migrations
 echo "[2/5] Running Alembic Database Migrations..."

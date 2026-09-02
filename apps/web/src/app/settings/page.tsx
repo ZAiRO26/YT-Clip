@@ -141,8 +141,8 @@ export default function SettingsPage() {
                 className="block w-full rounded-md border-cf-border bg-cf-bg py-2 px-3 text-white focus:border-cf-primary focus:ring-1 focus:ring-cf-primary sm:text-sm appearance-none"
               >
                 <option value="auto">auto (Default)</option>
-                {testResult.models.map(m => (
-                  <option key={m} value={m}>{m}</option>
+                {Array.from(new Set(testResult.models)).map((m, idx) => (
+                  <option key={`${m}-${idx}`} value={m}>{m}</option>
                 ))}
               </select>
             ) : (
@@ -220,14 +220,14 @@ export default function SettingsPage() {
                     <div className="mt-3">
                       <p className="text-xs text-cf-muted-fg mb-1">Available Models:</p>
                       <div className="flex flex-wrap gap-2">
-                        {testResult.models.slice(0, 5).map(m => (
-                          <span key={m} className="px-2 py-1 text-xs rounded bg-cf-bg border border-cf-border text-white">
+                        {Array.from(new Set(testResult.models)).slice(0, 5).map((m, idx) => (
+                          <span key={`${m}-${idx}`} className="px-2 py-1 text-xs rounded bg-cf-bg border border-cf-border text-white">
                             {m}
                           </span>
                         ))}
-                        {testResult.models.length > 5 && (
+                        {Array.from(new Set(testResult.models)).length > 5 && (
                           <span className="px-2 py-1 text-xs rounded bg-cf-bg text-cf-muted-fg">
-                            +{testResult.models.length - 5} more
+                            +{Array.from(new Set(testResult.models)).length - 5} more
                           </span>
                         )}
                       </div>

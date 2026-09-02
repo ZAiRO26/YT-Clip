@@ -175,3 +175,8 @@
     - **Community Documentation (`README.md`):** [x] Created comprehensive showcase README with feature breakdowns, architecture flowcharts, 1-click startup guides, and tech stack details.
     - **Cross-Platform Launcher (`start.sh`):** [x] Created POSIX bash launcher for macOS and Linux users with automatic Docker provisioning, Alembic migration, Kokoro model verification, and service lifecycle management.
     - **License (`LICENSE`):** [x] Added standard permissive MIT License for public repository distribution.
+
+ 29. **Session 8 (Launcher Optimization, Disk Reclamation & React Key Hardening):**
+    - **Launcher Docker Service Scoping:** [x] Refactored `start.bat`, `start-v2.bat`, and `start.sh` to explicitly target `postgres redis minio`, preventing accidental heavy image rebuilds and eliminating package downloads on startup.
+    - **Disk Space Recovery:** [x] Created `scripts/reclaim_c_drive_space.bat`, compacted WSL2 VHDX virtual disk, and purged obsolete download/updater caches, recovering **+41 GB** of free space on C: drive (from 472 MB to 41.54 GB free).
+    - **React Duplicate Key Elimination:** [x] Deduplicated model listings in `apps/web/src/app/settings/page.tsx` using `Array.from(new Set(...))` and composite indexed keys, completely resolving all 51 duplicate React key warnings.

@@ -11,7 +11,7 @@ cd /d "%~dp0"
 
 :: 1. Check & Start Docker Infrastructure
 echo [1/5] Starting Docker Infrastructure (Postgres 16, Redis 7, MinIO S3)...
-docker compose -f infra/docker-compose.yml up -d
+docker compose -f infra/docker-compose.yml up -d postgres redis minio
 if %errorlevel% neq 0 (
     echo [WARNING] Docker compose failed to start or is already running. Continuing...
 )
