@@ -48,12 +48,11 @@
   - **Studio Action Labels (Item 2):** Clarified button distinction in Clip Studio (`/project/[id]/clip/[clipId]`) to "Save Metadata" (fast metadata save) vs. "Re-render Video (New Effects / Audio)".
   - **AUDIT-P1-05 Policy Compliance (Item 3):** Fully refactored candidate selection and ranking to canonical `editorial_potential` metric ($50\%$ weight alongside $50\%$ `transformation_score`). Updated prompt schema, candidate ranker formula, schemas, web tooltips, and unit tests with backward-compatible legacy fallbacks.
   - **Test Suite Verification:** 55/55 Python unit tests passing; Next.js 16 build passing with 0 errors across all routes.
-- **Session 6 (Unified Project Creation Brand & Styling Kit):** ✅ 100% Complete
-  - **Project Creation Styling Defaults:** Added Section 4 "Production & Brand Styling Kit" to `/new` creation wizard without removing any existing settings.
-  - **Supported Batch Defaults:** Framing / Aspect Ratio (`face_track`, `blur_background`, `center`), Subtitle Typography (`bold_karaoke`, `minimal`, `clean_subtitle`, `none`), Multi-Select Motion Effects Stack (6 verified effects with stacking clarity warning), and Offline Kokoro Voice Persona.
-  - **Database & Render Pipeline Integration:** Added columns to `Project` model with Alembic migration `5e32881da290_add_project_styling_defaults.py`. Updated `render.py` to batch-render all candidate clips with the project's styling baseline on the very first pass.
-  - **Verification:** 55/55 Python unit tests passing with zero regressions, Next.js production build compiling clean.
-- **Overall v2 Upgrade Roadmap:** ✅ Sprints A through D, Post-Beta Polish & Unified Project Styling Complete. Production & Open-Source Ready.
+- **Session 7 (Open-Source Launch Package):** ✅ 100% Complete
+  - **Showcase Community Documentation:** Created root `README.md` with architecture diagrams, quickstart workflows, feature breakdown, and tech stack details.
+  - **Cross-Platform Launch Support:** Created POSIX `start.sh` for macOS and Linux users with automatic service orchestration and Kokoro model verification.
+  - **Open-Source License:** Added permissive MIT `LICENSE`.
+- **Overall v2 Upgrade Roadmap:** ✅ Sprints A through D, Post-Beta Polish, Unified Project Styling & Open-Source Launch Package Complete. Production Ready.
 
 ## v1 Baseline
 - `master` branch contains the QA-verified v1 codebase (commit `f342cbe`).

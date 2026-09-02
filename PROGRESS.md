@@ -170,3 +170,8 @@
     - **Batch Render Engine Integration:** [x] Updated `render.py` to read `project.crop_mode` and `project.default_effects`, applying selected framing and motion effects across all candidate clips during the initial batch rendering pass.
     - **Reactive Video Player Refresh:** [x] Added `key={videoVersion}` and cache-busting timestamp queries (`?v=${videoVersion}`) to Clip Studio video players to prevent stale browser disk-caching on re-render.
     - **Verification:** [x] 55/55 Python unit tests passing with zero regressions; Next.js production build compiling clean across all 8 static and dynamic routes.
+
+ 28. **Session 7 (Open-Source Community Launch Package):**
+    - **Community Documentation (`README.md`):** [x] Created comprehensive showcase README with feature breakdowns, architecture flowcharts, 1-click startup guides, and tech stack details.
+    - **Cross-Platform Launcher (`start.sh`):** [x] Created POSIX bash launcher for macOS and Linux users with automatic Docker provisioning, Alembic migration, Kokoro model verification, and service lifecycle management.
+    - **License (`LICENSE`):** [x] Added standard permissive MIT License for public repository distribution.
