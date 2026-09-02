@@ -572,8 +572,8 @@ async def export_project_clips(
             source_path = media_base / rel_url
 
             if source_path.exists():
-                clip_title_raw = clip.title or f"clip_{idx + 1}"
-                safe_clip_title = re.sub(r'[\\/*?:"<>|]', "", clip_title_raw).strip().replace(" ", "_")[:50]
+                clip_title_raw = getattr(clip, "title", None) or f"clip_{idx + 1}"
+                safe_clip_title = re.sub(r'[\\/*?:"<>|]', "", str(clip_title_raw)).strip().replace(" ", "_")[:50]
                 clip_filename = f"{exported_count + 1:02d}_{safe_clip_title}.mp4"
                 dest_path = target_export_dir / clip_filename
                 shutil.copy2(source_path, dest_path)
@@ -590,18 +590,17 @@ async def export_project_clips(
                         thumb_dest = target_export_dir / thumb_filename
                         shutil.copy2(thumb_source, thumb_dest)
 
+                duration_sec = round(clip.end_sec - clip.start_sec, 2) if (clip.end_sec is not None and clip.start_sec is not None) else None
                 exported_manifest_items.append({
                     "clip_number": exported_count + 1,
                     "clip_id": str(clip.id),
                     "filename": clip_filename,
                     "thumbnail": thumb_filename,
-                    "title": clip.title,
-                    "start_time": clip.start_time,
-                    "end_time": clip.end_time,
-                    "duration": round(clip.end_time - clip.start_time, 2) if (clip.end_time and clip.start_time) else None,
+                    "start_sec": clip.start_sec,
+                    "end_sec": clip.end_sec,
+                    "duration_sec": duration_sec,
                     "editorial_potential": clip.score,
                     "transformation_score": clip.transformation_score,
-                    "hook_type": clip.hook_type,
                     "reasoning": clip.reasoning,
                 })
 
@@ -619,7 +618,8 @@ async def export_project_clips(
         manifest_payload = {
             "project_id": str(project.id),
             "project_title": project.title,
-            "source_url": project.source_url,
+            "source_type": project.source_type,
+            "source_value": project.source_value,
             "rights_basis": project.rights_basis,
             "crop_mode": project.crop_mode,
             "exported_at": datetime.now(timezone.utc).isoformat(),
