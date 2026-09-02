@@ -19,7 +19,7 @@ def mix_audio_tracks(
     voiceover_path: str | Path | None = None,
     music_path: str | Path | None = None,
     voiceover_delay_sec: float = 0.5,
-    music_volume_db: float = -14.0,
+    music_volume_db: float = -8.0,
     source_duck_db: float = -12.0,
 ) -> Dict[str, Any]:
     """
@@ -57,7 +57,7 @@ def mix_audio_tracks(
         # Delay VO if requested and pad with silence so ducking releases cleanly after narration finishes
         delay_ms = int(voiceover_delay_sec * 1000)
         filter_complex_parts.append(f"[{vo_idx}:a]adelay={delay_ms}|{delay_ms},volume=1.0,apad[vo_delayed];")
-        # Duck source under VO
+        # Duck source and music under VO
         filter_complex_parts.append(f"[{music_idx}:a]volume={music_volume_db}dB[bg_low];")
         filter_complex_parts.append(
             "[0:a][vo_delayed]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=250[ducked_src];"
