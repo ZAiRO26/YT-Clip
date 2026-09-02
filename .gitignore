@@ -55,6 +55,12 @@ desktop.ini
 media/
 downloads/
 temp/
+models/
+*.onnx
+*.bin
 
 # ===== Docker =====
 docker-compose.override.yml
+
+# ===== Scratch =====
+scratch/

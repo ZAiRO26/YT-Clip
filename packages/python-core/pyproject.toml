@@ -23,6 +23,11 @@ dependencies = [
     "alembic>=1.13.0",
     "celery[redis]>=5.4.0",
     "redis>=5.0.0",
+    "mediapipe>=0.10.0,<=0.10.14",
+    "opencv-python>=4.8.0",
+    "kokoro-onnx>=0.6.1",
+    "soundfile>=0.12.0",
+    "espeakng-loader>=0.2.0",
 ]
 
 [project.optional-dependencies]

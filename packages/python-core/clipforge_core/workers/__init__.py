@@ -14,10 +14,12 @@ from clipforge_core.services import pipeline  # noqa: F401
 
 # Import worker modules so Celery discovers their tasks
 from clipforge_core.workers import (
+    analysis,  # noqa: F401
     caption,  # noqa: F401
-    crop,  # noqa: F401
     download,  # noqa: F401
+    render,  # noqa: F401
     select,  # noqa: F401
+    thumbnail,  # noqa: F401
     transcribe,  # noqa: F401
 )
 

@@ -96,8 +96,7 @@ Return a JSON object:
       "title": "Short punchy title",
       "hook_type": "question",
       "hook_text": "Did you know that...",
-      "key_takeaway": "Summary of main lesson or thesis",
-      "virality_score": 0.85,
+      "editorial_potential": 0.85,
       "reasoning": "Why this moment was selected",
       "suggested_callouts": ["Term 1", "Statistic 2"]
     }}
@@ -269,6 +268,9 @@ def select_clips(
                 has_takeaway=bool(raw.get("key_takeaway")),
             )
 
+            editorial_pot = round(
+                float(raw.get("editorial_potential", raw.get("virality_score", raw.get("score", 0.75)))), 2
+            )
             cand = {
                 "start_sec": round(start_s, 2),
                 "end_sec": round(end_s, 2),
@@ -276,7 +278,8 @@ def select_clips(
                 "hook_type": raw.get("hook_type", "bold_statement"),
                 "hook_text": raw.get("hook_text", ""),
                 "key_takeaway": raw.get("key_takeaway", ""),
-                "virality_score": round(float(raw.get("virality_score", raw.get("score", 0.75))), 2),
+                "editorial_potential": editorial_pot,
+                "virality_score": editorial_pot,  # Backward compatibility
                 "transformation_score": t_score_data["score"],
                 "transformation_breakdown": t_score_data["breakdown"],
                 "transformation_band": t_score_data["band"],
@@ -311,7 +314,7 @@ def select_clips(
                     project_id=pid,
                     start_sec=c["start_sec"],
                     end_sec=c["end_sec"],
-                    score=c["virality_score"],
+                    score=c.get("editorial_potential", c.get("virality_score", 0.75)),
                     transformation_score=c["transformation_score"],
                     transformation_breakdown=c["transformation_breakdown"],
                     reasoning=f"[{c['hook_type']}] {c['title']} — {c['reasoning']}",

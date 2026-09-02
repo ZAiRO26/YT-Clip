@@ -109,7 +109,10 @@ class ProjectCreate(BaseModel):
     min_length_sec: int = Field(default=20, ge=5, le=300)
     max_length_sec: int = Field(default=60, ge=10, le=600)
     aspect_ratio: str = Field(default="9:16", pattern="^(9:16|1:1|16:9)$")
-    caption_style: str = Field(default="bold_karaoke")
+    crop_mode: str = Field(default="face_track", description="Framing mode: face_track, blur_background, center")
+    caption_style: str = Field(default="bold_karaoke", description="Caption typography preset")
+    default_effects: list[dict[str, Any]] = Field(default_factory=list, description="Default motion effect layers")
+    default_voice_id: str = Field(default="af_bella", description="Default Kokoro voice persona")
     custom_prompt: str | None = Field(default=None, description="Optional custom prompt to guide clip selection")
     time_range_start: float | None = Field(default=None, description="Optional start time in seconds")
     time_range_end: float | None = Field(default=None, description="Optional end time in seconds")
@@ -143,7 +146,10 @@ class ProjectResponse(BaseModel):
     min_length_sec: int
     max_length_sec: int
     aspect_ratio: str
-    caption_style: str
+    crop_mode: str = "face_track"
+    caption_style: str = "bold_karaoke"
+    default_effects: list[dict[str, Any]] = Field(default_factory=list)
+    default_voice_id: str = "af_bella"
     status: str
     created_at: datetime
     jobs: list[JobStatus] = []
@@ -156,10 +162,10 @@ class ProjectListItem(BaseModel):
     title: str | None = None
     source_type: str
     source_value: str
-    rights_basis: str
-    source_risk_label: str
-    editorial_template: str
-    clip_count: int
+    rights_basis: str = "owned"
+    source_risk_label: str = "lower_workflow_risk"
+    editorial_template: str = "explainer"
+    clip_count: int = 5
     status: str
     created_at: datetime
     preview_url: str | None = None
@@ -189,7 +195,10 @@ class ClipResponse(BaseModel):
 
 
 class ClipUpdate(BaseModel):
-    review_status: str = Field(..., pattern="^(pending|approved|rejected)$")
+    review_status: str | None = Field(default=None, pattern="^(pending|approved|rejected)$")
+    start_sec: float | None = None
+    end_sec: float | None = None
+    reasoning: str | None = None
 
 
 class ReclipRequest(BaseModel):
@@ -235,6 +244,7 @@ class CandidateClipSchema(BaseModel):
     hook_type: HookType = "bold_statement"
     hook_text: str
     key_takeaway: str
+    editorial_potential: float = Field(default=0.7, ge=0.0, le=1.0)
     virality_score: float = Field(default=0.7, ge=0.0, le=1.0)
     transformation_score: int = Field(default=75, ge=0, le=100)
     transformation_breakdown: dict[str, int] = Field(default_factory=dict)

@@ -69,7 +69,7 @@ uv run uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --port 8000 --relo
 
 # Terminal 2: Celery Worker
 set PYTHONPATH=apps/worker;packages/python-core
-uv run celery -A app.celery_app worker -Q ingest,analysis,llm,editorial,render,qa,default -c 2 -P solo --loglevel=info
+uv run celery -A clipforge_core.celery_app worker -Q default,ingest,analysis,llm,editorial,render,qa -P solo --loglevel=info
 
 # Terminal 3: Next.js Frontend
 pnpm dev

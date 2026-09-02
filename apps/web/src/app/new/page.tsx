@@ -28,13 +28,22 @@ export default function NewProjectPage() {
   const [minLength, setMinLength] = useState(20);
   const [maxLength, setMaxLength] = useState(60);
   const [aspectRatio, setAspectRatio] = useState("9:16");
+  const [cropMode, setCropMode] = useState("face_track");
   const [captionStyle, setCaptionStyle] = useState("bold_karaoke");
+  const [selectedEffects, setSelectedEffects] = useState<string[]>([]);
+  const [voiceId, setVoiceId] = useState("af_bella");
   const [selectedBriefId, setSelectedBriefId] = useState<string | "">("");
 
   // Time & Selection Customization
   const [customPrompt, setCustomPrompt] = useState("");
   const [timeRangeStart, setTimeRangeStart] = useState("");
   const [timeRangeEnd, setTimeRangeEnd] = useState("");
+
+  const toggleEffect = (effId: string) => {
+    setSelectedEffects((prev) =>
+      prev.includes(effId) ? prev.filter((e) => e !== effId) : [...prev, effId]
+    );
+  };
 
   // Brief Creation Form
   const [showBriefForm, setShowBriefForm] = useState(false);
@@ -107,7 +116,10 @@ export default function NewProjectPage() {
         min_length_sec: minLength,
         max_length_sec: maxLength,
         aspect_ratio: aspectRatio,
+        crop_mode: cropMode,
         caption_style: captionStyle,
+        default_effects: selectedEffects.map((e) => ({ id: e, intensity: 0.5 })),
+        default_voice_id: voiceId,
       };
 
       if (customPrompt.trim()) {
@@ -379,10 +391,142 @@ export default function NewProjectPage() {
             </div>
           </section>
 
+          {/* Section 4: Production & Brand Styling Kit */}
+          <section className="space-y-4 rounded-xl border border-border bg-surface p-5">
+            <div>
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold">4. Production &amp; Brand Styling Kit</h2>
+                <span className="text-[10px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded font-mono">
+                  Batch Default
+                </span>
+              </div>
+              <p className="text-xs text-cf-muted mt-1">
+                Configure styling baseline for all generated clips. You can still fine-tune individual clips in the Studio later.
+              </p>
+            </div>
+
+            {/* 4A: Layout & Crop */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-cf-muted block">Framing &amp; Aspect Ratio</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: "face_track", label: "👤 Face Track 9:16", desc: "Auto-centers speaker" },
+                  { id: "blur_background", label: "🌁 Blurred BG", desc: "Ambient side-blur" },
+                  { id: "center", label: "🔲 Center Crop", desc: "Fixed center 9:16" },
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setCropMode(m.id)}
+                    className={`p-2.5 rounded-lg border text-left transition-all ${
+                      cropMode === m.id
+                        ? "border-primary bg-primary/10 ring-1 ring-primary/50 text-primary"
+                        : "border-border bg-card text-cf-muted hover:border-border/80"
+                    }`}
+                  >
+                    <span className="text-xs font-semibold block">{m.label}</span>
+                    <span className="text-[10px] text-cf-muted block mt-0.5">{m.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 4B: Caption Presets */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-cf-muted block">Subtitle Typography Preset</label>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {[
+                  { id: "bold_karaoke", label: "⚡ Bold Karaoke", desc: "Yellow bounce pop" },
+                  { id: "minimal", label: "✨ Minimal White", desc: "Clean modern sans" },
+                  { id: "clean_subtitle", label: "📺 Clean Subtitle", desc: "Classic black bar" },
+                  { id: "none", label: "🚫 None", desc: "No burned-in text" },
+                ].map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setCaptionStyle(c.id)}
+                    className={`p-2.5 rounded-lg border text-left transition-all ${
+                      captionStyle === c.id
+                        ? "border-primary bg-primary/10 ring-1 ring-primary/50 text-primary"
+                        : "border-border bg-card text-cf-muted hover:border-border/80"
+                    }`}
+                  >
+                    <span className="text-xs font-semibold block">{c.label}</span>
+                    <span className="text-[10px] text-cf-muted block mt-0.5">{c.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 4C: Motion & Visual Effects */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-cf-muted">Default Motion &amp; Visual Effects (Stackable)</label>
+                <span className="text-[10px] text-cf-muted">{selectedEffects.length} active</span>
+              </div>
+
+              {selectedEffects.length > 2 && (
+                <div className="p-2 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] leading-tight">
+                  ⚠️ Stacking more than 2 effects may reduce visual clarity.
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {[
+                  { id: "film_grain", label: "🎞️ Film Grain" },
+                  { id: "vignette", label: "🎬 Vignette" },
+                  { id: "zoom", label: "🔍 Push-In Zoom" },
+                  { id: "camera_shake", label: "📳 Handheld Shake" },
+                  { id: "rgb_split", label: "🌈 RGB Glitch" },
+                  { id: "vhs_noise", label: "📼 VHS Retro" },
+                ].map((eff) => {
+                  const isSelected = selectedEffects.includes(eff.id);
+                  return (
+                    <button
+                      key={eff.id}
+                      type="button"
+                      onClick={() => toggleEffect(eff.id)}
+                      className={`p-2 rounded-lg border text-xs font-medium text-left transition-all ${
+                        isSelected
+                          ? "border-primary bg-primary/15 text-primary ring-1 ring-primary/50 shadow-sm"
+                          : "border-border bg-card text-foreground hover:border-white/20"
+                      }`}
+                    >
+                      {eff.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 4D: Studio Voice Persona */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-cf-muted">Default Studio Voice Persona</label>
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded">
+                  ⚡ Offline Kokoro TTS
+                </span>
+              </div>
+              <select
+                value={voiceId}
+                onChange={(e) => setVoiceId(e.target.value)}
+                className="w-full rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+              >
+                <option value="af_bella">Bella — Warm &amp; Engaging Explainer (US Female)</option>
+                <option value="am_adam">Adam — Dynamic &amp; Authoritative Host (US Male)</option>
+                <option value="bf_emma">Emma — Expressive Narrator (British Female)</option>
+                <option value="bm_george">George — Deep &amp; Authoritative (British Male)</option>
+                <option value="af_sarah">Sarah — Crisp &amp; Articulate (US Female)</option>
+                <option value="am_michael">Michael — Deep &amp; Resonant (US Male)</option>
+                <option value="af_nicole">Nicole — Soft &amp; Conversational (US Female)</option>
+              </select>
+            </div>
+          </section>
+
           {/* Campaign Briefs & Guidance */}
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold">Campaign Brief & Guidance</h2>
+              <h2 className="text-sm font-semibold">5. Campaign Brief &amp; Guidance (Optional)</h2>
               <button
                 type="button"
                 onClick={() => setShowBriefForm(!showBriefForm)}

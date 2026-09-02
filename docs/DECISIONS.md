@@ -150,3 +150,34 @@ Use current stable shadcn/ui CLI/release, not canary/v2.
 
 ClipForge will not auto-upload or auto-post to YouTube, TikTok, Instagram,
 or any other platform. All publishing is manual and user-initiated.
+
+---
+
+## ADR-011: Missing Database Models for Intermediate Artifacts
+
+**Date:** 2026-09-01
+**Status:** Accepted  Technical Debt
+**Spec ref:** Operational Readiness Sprint (QA Audit Remediation)
+
+The intermediate artifacts \processing_runs\, \	ranscripts\, \clip_candidates\, and \clip_renders\ currently exist only as filesystem artifacts (\.json\/\.mp4\ in the media directory) and do not have durable PostgreSQL database models defined in the ORM.
+
+While acceptable for the immediate local-alpha golden-path test, this violates long-term v2 schema compliance. It must be addressed in a future refactoring sprint to ensure proper relational tracking, cleanup, and queries.
+
+---
+
+## ADR-012: espeak-ng GPL-3.0 Licensing Dependency for Kokoro Phonemization
+
+**Date:** 2026-09-02
+**Status:** Accepted with Commercial Deployment Review Requirement
+**Spec ref:** Sprint D (Audio Studio — Local Kokoro TTS)
+
+Kokoro TTS uses \espeakng-loader\ for text-to-phoneme conversion. \espeakng-loader\ bundles and dynamically loads \espeak-ng\, which is licensed under **GPL-3.0** (a strong copyleft license).
+
+### Assessment & Constraints
+1. **Local Personal-Use Alpha (Current):** Acceptable with zero legal exposure, as private non-distributed personal use does not trigger GPL distribution obligations.
+2. **Commercial Distribution & Packaging Gate:** Before ClipForge is distributed as a packaged desktop/CLI application, sold, licensed, or offered as a multi-tenant commercial hosted SaaS service, this dependency must undergo explicit licensing review.
+3. **Future Remediation Pathways:**
+   - Isolate the phonemization service into a standalone, separable microservice/subprocess boundary.
+   - Migrate to a permissively licensed (MIT / Apache-2.0 / BSD) phonemizer (e.g. Misaki phonemizer or native rule-based lexicon).
+   - Comply with GPL-3.0 copyleft obligations for distributed components where applicable.
+

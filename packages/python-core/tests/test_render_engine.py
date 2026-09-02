@@ -26,8 +26,18 @@ def test_build_render_manifest():
     assert manifest["manifest_version"] == "1.0.0"
     assert manifest["output"]["width"] == 1080
     assert manifest["output"]["height"] == 1920
-    assert manifest["editorial"]["transformation_score"] == 85
+    assert manifest["metadata"]["transformation_score"] == 85
     assert manifest["crop"]["mode"] == "face_track"
+
+    # Programmatic Draft-07 schema validation in unit test
+    import json
+    from jsonschema import Draft7Validator
+    schema_file = Path(__file__).parent.parent.parent.parent / "docs" / "RENDER_MANIFEST_SCHEMA.json"
+    if schema_file.exists():
+        schema = json.loads(schema_file.read_text(encoding="utf-8"))
+        validator = Draft7Validator(schema)
+        errors = list(validator.iter_errors(manifest))
+        assert len(errors) == 0, f"Schema validation failed: {[e.message for e in errors]}"
 
 
 def test_render_clip_real_ffmpeg_execution(tmp_path):

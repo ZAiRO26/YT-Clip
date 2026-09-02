@@ -18,7 +18,42 @@ def test_snap_to_scene_boundaries():
     assert e == 32.1
 
 
-def test_deduplicate_and_rank_candidates():
+def test_deduplicate_and_rank_candidates_editorial_potential():
+    candidates = [
+        {
+            "start_sec": 10.0,
+            "end_sec": 40.0,
+            "editorial_potential": 0.9,
+            "transformation_score": 80,
+            "title": "Top Editorial Clip",
+        },
+        {
+            "start_sec": 12.0,
+            "end_sec": 38.0,  # Overlaps significantly with Top Clip
+            "editorial_potential": 0.5,
+            "transformation_score": 40,
+            "title": "Duplicate Clip",
+        },
+        {
+            "start_sec": 50.0,
+            "end_sec": 80.0,
+            "editorial_potential": 0.8,
+            "transformation_score": 75,
+            "title": "Second Distinct Clip",
+        },
+    ]
+
+    ranked = deduplicate_and_rank_candidates(candidates)
+    assert len(ranked) == 2
+    assert ranked[0]["title"] == "Top Editorial Clip"
+    # Composite: (0.9 * 0.5) + (0.8 * 0.5) = 0.45 + 0.40 = 0.85
+    assert ranked[0]["composite_rank"] == 0.85
+    assert ranked[1]["title"] == "Second Distinct Clip"
+    # Composite: (0.8 * 0.5) + (0.75 * 0.5) = 0.40 + 0.375 = 0.775
+    assert ranked[1]["composite_rank"] == 0.775
+
+
+def test_deduplicate_and_rank_candidates_legacy_fallback():
     candidates = [
         {
             "start_sec": 10.0,
@@ -47,3 +82,4 @@ def test_deduplicate_and_rank_candidates():
     assert len(ranked) == 2
     assert ranked[0]["title"] == "Top Clip"
     assert ranked[1]["title"] == "Second Distinct Clip"
+

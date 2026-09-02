@@ -54,23 +54,23 @@ def mix_audio_tracks(
     # Build filter graph
     if vo_idx is not None and music_idx is not None:
         # 3 streams: Source, VO, Music
-        # Delay VO if requested
+        # Delay VO if requested and pad with silence so ducking releases cleanly after narration finishes
         delay_ms = int(voiceover_delay_sec * 1000)
-        filter_complex_parts.append(f"[{vo_idx}:a]adelay={delay_ms}|{delay_ms},volume=1.1[vo_delayed];")
+        filter_complex_parts.append(f"[{vo_idx}:a]adelay={delay_ms}|{delay_ms},volume=1.0,apad[vo_delayed];")
         # Duck source under VO
         filter_complex_parts.append(f"[{music_idx}:a]volume={music_volume_db}dB[bg_low];")
         filter_complex_parts.append(
-            "[0:a][vo_delayed]sidechaincompress=threshold=0.08:ratio=4:attack=20:release=250[ducked_src];"
-            "[bg_low][vo_delayed]sidechaincompress=threshold=0.08:ratio=6:attack=15:release=300[ducked_bg];"
+            "[0:a][vo_delayed]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=250[ducked_src];"
+            "[bg_low][vo_delayed]sidechaincompress=threshold=0.03:ratio=8:attack=15:release=300[ducked_bg];"
             "[ducked_src][vo_delayed][ducked_bg]amix=inputs=3:duration=first:dropout_transition=2,"
             "loudnorm=I=-14:LRA=7:TP=-1.5[aout]"
         )
     elif vo_idx is not None:
         # 2 streams: Source and VO
         delay_ms = int(voiceover_delay_sec * 1000)
-        filter_complex_parts.append(f"[{vo_idx}:a]adelay={delay_ms}|{delay_ms},volume=1.1[vo_delayed];")
+        filter_complex_parts.append(f"[{vo_idx}:a]adelay={delay_ms}|{delay_ms},volume=1.0,apad[vo_delayed];")
         filter_complex_parts.append(
-            "[0:a][vo_delayed]sidechaincompress=threshold=0.08:ratio=4:attack=20:release=250[ducked_src];"
+            "[0:a][vo_delayed]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=250[ducked_src];"
             "[ducked_src][vo_delayed]amix=inputs=2:duration=first:dropout_transition=2,"
             "loudnorm=I=-14:LRA=7:TP=-1.5[aout]"
         )

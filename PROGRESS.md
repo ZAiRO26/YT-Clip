@@ -99,3 +99,74 @@
 ## 🏆 Project Upgrade Milestone: ALL 10 PHASES 100% COMPLETE & VERIFIED
 - Product policy, rights declaration, and risk labeling fully active.
 - End-to-end local-first transformative pipeline (ingest → transcribe → select → editorial transformation → voiceover studio → motion effects → professional 1080x1920 render) is fully operational.
+
+ 19. **Operational Readiness Sprint (Audit Fixes):**
+    - **P0-01 (Database Migration):** [x] Generated valid Alembic migration covering all 9 models and injected valid SQL trigger for updated_at.
+    - **P0-03 (Queue Routing):** [x] Removed legacy queue names and updated celery_app.py and workers to use the 7 approved v2 queues (ingest, analysis, llm, editorial, render, qa, default). Updated start-v2.bat and DEPLOYMENT.md.
+    - **P0-02 (End-to-End Verification):** [x] Golden-path end-to-end live test verified with real LLM endpoint (OmniRoute), resolving Draft-07 manifest validation errors.
+
+ 20. **Beta Sprint A (Core Spoken-Video & Schema Alignment):**
+    - **Manifest Validation:** [x] Fixed `render_engine.py` to strictly match `RENDER_MANIFEST_SCHEMA.json` (pixel coordinates for crop keyframes, clamped transformation breakdown ranges). Draft-07 validation: 3/3 PASS.
+    - **Stream QA:** [x] Probed and decoded all 3 clips (exit code 0 on full ffmpeg null decode).
+    - **Rights Documentation:** [x] Added `SOURCE_LICENSE.md` and `source-metadata.json` for professor spoken video fixture.
+
+ 21. **Beta Sprint B (MediaPipe Face-Tracking Crop & Cleanup):**
+    - **Dependency Pinning:** [x] Pinned `mediapipe==0.10.14` and `opencv-python>=4.8.0` in `pyproject.toml` with zero dependency conflicts.
+    - **BlazeFace Tracking Engine:** [x] Implemented `face_tracker.py` using `mp.solutions.face_detection.FaceDetection` (model_selection=1) with exponential coordinate smoothing (`smoothing_factor=0.25`) and standard deviation computation.
+    - **Graceful Degradation:** [x] When MediaPipe is unavailable or no faces are present, automatically falls back to center-crop (`focal_x=0.5`).
+    - **Live Fixture Verification:** [x] Ran tracking across 131s professor fixture: 449 samples, 398 faces detected (88.6% detection rate), `avg_focal_x=0.5020`, `std_dev_focal_x=0.1250`.
+    - **Multi-Frame Visual Confirmation:** [x] Extracted frames at t=2.0s, t=18.0s, t=32.0s confirming responsive framing.
+    - **Dead Code Purge:** [x] Deleted dead `crop.py` worker and removed route from `celery_app.py` and `workers/__init__.py`.
+    - **Automated Tests:** [x] All 42/42 unit tests passing.
+
+ 22. **Beta Sprint C (Motion Effects Engine Wiring — Grain & Vignette):**
+    - **Atomic Replacement:** [x] Implemented temporary-path write in `apply_motion_effects` with atomic swap (`os.replace`) strictly on exit code 0.
+    - **Manifest Schema Compliance:** [x] Render manifest builder updated to format `manifest["effects"]["layers"]` conforming to `RENDER_MANIFEST_SCHEMA.json`.
+    - **Single Clip Re-render API:** [x] Wired `active_effects` filtering, execution, and manifest generation into `POST /api/clips/{id}/rerender`.
+    - **Clip Editor UI Hardening:** [x] Enabled only `film_grain` and `vignette`, explicitly disabled untested effects with `[Sprint C.1]` / `[Sprint C.2]` badges, and added soft warning for stacking >2 effects.
+    - **Live Fixture Tests (4/4 PASS):** [x] Executed No-effects baseline regression, individual Film Grain, individual Vignette, and combined Grain + Vignette on professor fixture with 0 decode errors and valid Draft-07 manifests.
+    - **Test & Build Verification:** [x] 45/45 Python unit tests passing, Next.js 16 build passing with 0 errors.
+
+ 23. **Beta Sprint C.1 (Zoom & Handheld Shake vs. Dynamic Face Crop Interaction):**
+    - **Literal Rate Computation:** [x] Calculated scale rate in Python (`rate = (0.12 * intensity) / duration_sec`) and dynamically bound to `in_w` / `in_h` with `trunc(.../2)*2`.
+    - **Bounded Handheld Shake:** [x] Bounded camera jitter within $[0, 2 \times J]$ safe margin and rescaled back to canvas via Lanczos.
+    - **Off-Center Deviation Verification:** [x] Tested at maximum face tracking deviation timestamps ($t=6.26\text{s}$, $focal\_x=0.1980$ and $t=14.44\text{s}$, $focal\_x=0.6980$) confirming speaker remains fully framed with centered, legible captions.
+    - **Extreme Intensity Boundary:** [x] Tested at intensity $I=1.0$ with 0 decode errors and no out-of-bounds crops.
+    - **Full 4-Effect Stack:** [x] Tested `film_grain` + `vignette` + `zoom` + `camera_shake` combined with 0 decode errors and valid Draft-07 manifest (4 layers).
+    - **Web UI Activation:** [x] Enabled Push-In Zoom and Handheld Shake toggles in Clip Editor UI.
+    - **Test & Build Verification:** [x] 48/48 Python unit tests passing, Next.js build clean with 0 errors.
+
+ 24. **Beta Sprint C.2 (Color/Texture Effects: RGB Glitch & VHS Retro):**
+    - **Native `rgbashift` Implementation:** [x] Replaced multi-node split/crop/lutrgb graph with native `rgbashift=rh={offset}:bh=-{offset}:edge=smear`.
+    - **Unshifted Green Channel:** [x] Confirmed zero green channel displacement (`gh=0`, `gv=0`) to ensure chromatic aberration without center text blur.
+    - **Edge Smear Verification:** [x] Confirmed zero black boundary margins or wrap-around ghosting at maximum intensity ($offset=6\text{px}$).
+    - **Caption Readability Across Boundaries:** [x] Verified frame extractions with active captions at both $I=0.50$ and $I=1.00$ for RGB Glitch and VHS Retro individually.
+    - **All 6 Effects Stacked Live Verification:** [x] Re-rendered 39.3s live fixture clip with all 6 effects combined (Grain, Vignette, Zoom, Shake, RGB Glitch, VHS Retro) with 0 decode errors and Draft-07 manifest validated (6 layers).
+    - **Web UI Full Activation:** [x] Enabled all 6 effect buttons in Clip Editor UI with stacking soft warning.
+    - **Test & Build Verification:** [x] 52/52 Python unit tests passing (12/12 in `test_effects_engine.py`), Next.js build clean with 0 errors.
+
+ 25. **Beta Sprint D (Audio Studio — Local Kokoro TTS, Sidechain Ducking & EBU R128 Loudnorm):**
+    - **Offline Kokoro TTS Engine:** [x] Replaced legacy async TTS with local Kokoro ONNX Runtime engine in `tts_service.py` with zero network calls at inference time.
+    - **Model Asset Download & Provenance:** [x] Created `scripts/download_kokoro_models.py` verifying official SHA-256 hashes (`kokoro-v0_19.onnx`: `dece567789190ebe987bd245d95c09d5ac86de28ff0c325c2e3faaf3de04442c`, `voices.bin`: `157eab2fa1dd1c91b46599ea6f514bf86f66944c0c760250ed324e6cd99af075`) with upstream release URLs documented in comments. Models excluded from git via `.gitignore`.
+    - **Licensing Compliance Architecture:** [x] Documented `espeak-ng` GPL-3.0 phonemization dependency in ADR-012 (`docs/DECISIONS.md`).
+    - **Calibrated Dynamic Sidechain Ducking:** [x] Configured FFmpeg sidechain compression (`threshold=0.03:ratio=6:attack=15:release=250` with `apad` tail padding) in `audio_mixer.py` yielding verified speech attenuation and inter-sentence recovery.
+    - **Objective RMS & Loudness Measurements on Live Fixture:**
+      - Test 1 (No Voiceover Regression): `measured_I = -14.49 LUFS`, Draft-07 manifest valid (`duck_original_under_voiceover: false`, `mode: "original_only"`).
+      - Test 2 (Realistic Multi-Sentence Narration with Bella): Speech window volume = `-39.40 dB`, recovery window volume = `-28.20 dB`, objective ducking $\Delta\text{dB} = +11.20\text{ dB}$, master output `measured_I = -14.30 LUFS`, Draft-07 manifest valid (`duck_original_under_voiceover: true`, `mode: "mix"`).
+      - Test 3 (British Voice Persona with George): Master output `measured_I = -13.68 LUFS`, Draft-07 manifest valid.
+    - **Web UI Studio Updates:** [x] Updated Voice Persona selector in `apps/web` with 7 Kokoro voices and offline badge, and removed synthetic sine-tone background music section.
+    - **Test & Build Verification:** [x] 53/53 Python unit tests passing, Next.js build clean with 0 errors.
+
+ 26. **Session 5 (Post-Beta Release Hardening & AUDIT-P1-05 Resolution):**
+    - **Direct File Download API:** [x] Implemented `GET /api/clips/{clip_id}/download` returning `FileResponse` with `Content-Disposition: attachment; filename="clip_{id}.mp4"` headers resolving local media paths.
+    - **Automated Browser Export Download:** [x] Updated `confirmExport` in `apps/web/src/app/project/[id]/page.tsx` to automatically trigger sequential file downloads for approved clips. Added direct "Download Clip" action to the Studio header.
+    - **Button Label Clarity:** [x] Updated Studio header buttons to explicitly distinguish between "Save Metadata" (fast metadata save) and "⚡ Re-render Video (New Effects / Audio)".
+    - **AUDIT-P1-05 Policy Compliance (Editorial Potential vs. Virality Score):** [x] Audited full ranking pipeline. Migrated candidate selection prompt, `candidate_ranker.py`, `schemas/__init__.py`, and web tooltips to canonical `editorial_potential` metric (50% weight alongside 50% `transformation_score`) with backward-compatible fallbacks.
+    - **Comprehensive Verification:** [x] 55/55 Python unit tests passing across all test modules; Next.js 16 build passing with 0 errors across all routes. All localhost services unified in `start-v2.bat`.
+
+ 27. **Session 6 (Unified Brand & Styling Kit on Project Creation):**
+    - **"Set Once, Render All" Architecture:** [x] Added Section 4 "Production & Brand Styling Kit" to `/new` wizard allowing creators to configure project-wide baseline styling (Framing mode, Subtitle preset, stackable Motion Effects, and Kokoro Voice Persona) before initial generation.
+    - **Schema & Database Integration:** [x] Added `crop_mode`, `default_effects` (JSONB), and `default_voice_id` to `Project` model, `ProjectCreate`, and `ProjectResponse` with Alembic migration `5e32881da290_add_project_styling_defaults.py`.
+    - **Batch Render Engine Integration:** [x] Updated `render.py` to read `project.crop_mode` and `project.default_effects`, applying selected framing and motion effects across all candidate clips during the initial batch rendering pass.
+    - **Reactive Video Player Refresh:** [x] Added `key={videoVersion}` and cache-busting timestamp queries (`?v=${videoVersion}`) to Clip Studio video players to prevent stale browser disk-caching on re-render.
+    - **Verification:** [x] 55/55 Python unit tests passing with zero regressions; Next.js production build compiling clean across all 8 static and dynamic routes.

@@ -5,6 +5,8 @@ All config loaded from environment variables via pydantic-settings.
 See .env.example for the full list.
 """
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 
@@ -15,9 +17,9 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     DEBUG: bool = True
 
-    # --- Database (Supabase Postgres) ---
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/clipforge"
-    DATABASE_URL_SYNC: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/clipforge"
+    # --- Database (Postgres on port 5433) ---
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@127.0.0.1:5433/clipforge"
+    DATABASE_URL_SYNC: str = "postgresql+psycopg2://postgres:postgres@127.0.0.1:5433/clipforge"
 
     # --- Redis (Celery broker + result backend) ---
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -57,9 +59,10 @@ class Settings(BaseSettings):
     TEMP_DIR: str = "./temp"
 
     model_config = {
-        "env_file": ".env",
+        "env_file": [".env", str(Path(__file__).resolve().parent.parent.parent.parent / ".env")],
         "env_file_encoding": "utf-8",
         "case_sensitive": True,
+        "extra": "ignore",
     }
 
 

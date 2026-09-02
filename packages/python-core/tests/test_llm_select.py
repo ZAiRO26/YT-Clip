@@ -46,7 +46,7 @@ async def test_llm_client_mock_json_completion():
                 "hook_type": "bold_statement",
                 "hook_text": "This changes everything in AI.",
                 "key_takeaway": "Autonomous tools are accelerating.",
-                "virality_score": 0.88,
+                "editorial_potential": 0.88,
                 "reasoning": "High impact insight",
                 "suggested_callouts": ["Key Fact 1"],
             }

@@ -318,7 +318,7 @@ def caption_clip(
 
 @celery_app.task(
     name="app.workers.caption.caption_clips",
-    queue="caption",
+    queue="editorial",
     bind=True,
     max_retries=1,
     default_retry_delay=15,

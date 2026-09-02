@@ -40,7 +40,7 @@ def deduplicate_and_rank_candidates(
 ) -> List[Dict[str, Any]]:
     """
     Deduplicates candidates that overlap significantly and sorts them by composite rank:
-    composite_rank = (virality_score * 0.5) + ((transformation_score / 100.0) * 0.5)
+    composite_rank = (editorial_potential * 0.5) + ((transformation_score / 100.0) * 0.5)
     """
     if not candidates:
         return []
@@ -59,10 +59,13 @@ def deduplicate_and_rank_candidates(
             c["start_sec"] = snapped_s
             c["end_sec"] = snapped_e
 
-        # Compute composite rank
-        virality = float(c.get("virality_score", c.get("score", 0.5)))
+        # AUDIT-P1-05: Product policy prohibits virality/monetization prediction.
+        # Primary candidate editorial score is editorial_potential, with graceful fallback to legacy virality_score.
+        editorial_score = float(
+            c.get("editorial_potential", c.get("virality_score", c.get("score", 0.5)))
+        )
         transformation = float(c.get("transformation_score", 50))
-        composite = (virality * 0.5) + ((transformation / 100.0) * 0.5)
+        composite = (editorial_score * 0.5) + ((transformation / 100.0) * 0.5)
         c["composite_rank"] = round(composite, 3)
         processed.append(c)
 

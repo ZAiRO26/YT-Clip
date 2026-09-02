@@ -13,7 +13,47 @@
 - **Phase 8 (Clip Editor and Brand Kits):** ✅ 100% Complete
 - **Phase 9 (Testing, Reliability, and Release Hardening):** ✅ 100% Complete
 - **Phase 10 (Scale Readiness & Localhost Optimization):** ✅ 100% Complete
-- **Overall v2 Upgrade Roadmap:** 🏆 100% COMPLETE & PRODUCTION-READY
+- **Operational Readiness (Audit Fixes):** ✅ 100% Complete (P0-01, P0-03, P0-02 fixed)
+- **Beta Sprint A (Core Spoken-Video Validation & Schema Alignment):** ✅ 100% Complete
+  - Render manifest generation updated and validated against Draft-07 canonical schema with zero errors.
+  - Video stream audio, codec (h264/aac), duration, and error-free decode verified via ffprobe/ffmpeg on professor speech fixture.
+  - Word-level ASS karaoke captions verified and aligned.
+  - Test fixture rights documented in `SOURCE_LICENSE.md` and `source-metadata.json`.
+  - Full test suite passing (41/41 tests passing).
+- **Beta Sprint B (MediaPipe Face-Tracking Crop & Cleanup):** ✅ 100% Complete
+  - MediaPipe `0.10.14` pinned with zero external token requirements and zero dependency conflicts.
+  - `face_tracker.py` implemented with BlazeFace detection, exponential coordinate smoothing (`smoothing_factor=0.25`), and graceful center-crop fallback (`fallback_used=True` when no face is present).
+  - Face tracking on professor fixture verified: 449 samples, 88.6% detection rate, `avg_focal_x=0.5020`, `std_dev_focal_x=0.1250` (demonstrating true dynamic framing variance).
+  - Extracted and verified frames at 3 timestamps (t=2s, t=18s, t=32s).
+  - Deleted dead `crop.py` worker and removed its route from `celery_app.py` and `workers/__init__.py`.
+  - Full test suite passing (42/42 tests passing).
+- **Beta Sprint C.2 (Color/Texture Effects: RGB Glitch & VHS Retro):** ✅ 100% Complete
+  - Native `rgbashift` Implementation: Implemented chromatic split directly via FFmpeg's C-native `rgbashift` with `edge=smear` and locked green channel (`rh={offset}:bh=-{offset}`).
+  - Unshifted Green Channel Confirmed: Green channel has 0 spatial offset (`gh=0`, `gv=0`), preventing center text smearing and general color blur.
+  - Caption Readability at Moderate ($0.5$) & Max ($1.0$) Intensity: Both RGB Glitch and VHS Retro verified at $I=0.50$ and $I=1.00$ with active burned-in karaoke captions. Captions remain completely crisp, distinct, and legible.
+  - Full 6-Effect Stack Live Verification: Re-rendered live fixture with all 6 effects combined (`film_grain`, `vignette`, `zoom`, `camera_shake`, `rgb_split`, `vhs_noise`) with 0 decode errors and valid Draft-07 manifest (6 layers).
+  - Web UI Fully Activated: All 6 motion and color effects active in Clip Editor UI with stacking clarity warning.
+  - Full workspace test suite passing (52/52 unit tests passing, Next.js build clean).
+- **Beta Sprint D (Audio Studio — Local Kokoro TTS, Sidechain Ducking & EBU R128 Loudnorm):** ✅ 100% Complete
+  - Zero-Network Local Kokoro TTS: Integrated `kokoro-onnx` ONNX Runtime engine with local thread-safe singleton model loader and verified zero network calls at inference time.
+  - Upstream Model Assets & Verification: Created `scripts/download_kokoro_models.py` verifying official SHA-256 hashes (`kokoro-v0_19.onnx` and `voices.bin`) with upstream model card URLs documented. Excluded `.onnx` and `.bin` from git via `.gitignore`.
+  - Licensing Architecture Documented: Appended ADR-012 in `docs/DECISIONS.md` documenting `espeak-ng` GPL-3.0 phonemization dependency and commercial distribution considerations.
+  - Dynamic Sidechain Ducking: Calibrated FFmpeg sidechain compression (`threshold=0.03:ratio=6:attack=15:release=250` with `apad` silent tail padding) yielding measured $\Delta \text{dB} = +11.20 \text{ dB}$ attenuation during speech and responsive recovery during pauses.
+  - EBU R128 Loudness Normalization: Applied `-14.0 \pm 0.5` LUFS mastering across all renders (no-voiceover: `-14.49 LUFS`, Bella voiceover: `-14.30 LUFS`, George voiceover: `-13.68 LUFS`).
+  - Strict Schema Manifests: Conditionally sets `duck_original_under_voiceover: false` when `audio.mode == "original_only"`, and `true` when `audio.mode == "mix"`. Validated against Draft-07 JSON schema with 0 errors.
+  - Web UI Updated: Replaced legacy voice selector with Kokoro voices (`af_bella`, `am_adam`, `bf_emma`, `bm_george`, `af_sarah`, `am_michael`, `af_nicole`), added offline status badge, and removed synthetic sine-tone music bed.
+  - Full test suite passing (53/53 unit tests passing, Next.js build clean).
+- **Post-Beta Polish & AUDIT-P1-05 Policy Compliance:** ✅ 100% Complete
+  - **Auto-Download on Export (Item 1):** Implemented `GET /api/clips/{clip_id}/download` with `Content-Disposition: attachment` headers, wired into project export modal with sequenced auto-trigger downloads, and added direct "Download Clip" header button in Clip Studio.
+  - **Studio Action Labels (Item 2):** Clarified button distinction in Clip Studio (`/project/[id]/clip/[clipId]`) to "Save Metadata" (fast metadata save) vs. "Re-render Video (New Effects / Audio)".
+  - **AUDIT-P1-05 Policy Compliance (Item 3):** Fully refactored candidate selection and ranking to canonical `editorial_potential` metric ($50\%$ weight alongside $50\%$ `transformation_score`). Updated prompt schema, candidate ranker formula, schemas, web tooltips, and unit tests with backward-compatible legacy fallbacks.
+  - **Test Suite Verification:** 55/55 Python unit tests passing; Next.js 16 build passing with 0 errors across all routes.
+- **Session 6 (Unified Project Creation Brand & Styling Kit):** ✅ 100% Complete
+  - **Project Creation Styling Defaults:** Added Section 4 "Production & Brand Styling Kit" to `/new` creation wizard without removing any existing settings.
+  - **Supported Batch Defaults:** Framing / Aspect Ratio (`face_track`, `blur_background`, `center`), Subtitle Typography (`bold_karaoke`, `minimal`, `clean_subtitle`, `none`), Multi-Select Motion Effects Stack (6 verified effects with stacking clarity warning), and Offline Kokoro Voice Persona.
+  - **Database & Render Pipeline Integration:** Added columns to `Project` model with Alembic migration `5e32881da290_add_project_styling_defaults.py`. Updated `render.py` to batch-render all candidate clips with the project's styling baseline on the very first pass.
+  - **Verification:** 55/55 Python unit tests passing with zero regressions, Next.js production build compiling clean.
+- **Overall v2 Upgrade Roadmap:** ✅ Sprints A through D, Post-Beta Polish & Unified Project Styling Complete. Production & Open-Source Ready.
 
 ## v1 Baseline
 - `master` branch contains the QA-verified v1 codebase (commit `f342cbe`).

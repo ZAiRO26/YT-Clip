@@ -127,12 +127,36 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
         source_asset_id = str(source_asset.id) if source_asset else str(uuid.uuid4())
         source_probe = source_asset.metadata_json if source_asset else probe_media(source_video)
 
+        crop_mode = getattr(project, "crop_mode", "face_track") or "face_track"
         caption_style = project.caption_style or "bold_karaoke"
+        default_effects = getattr(project, "default_effects", []) or []
         editorial_template = project.editorial_template or "explainer"
         rights_basis = project.rights_basis or "owned"
+        source_risk_label = project.source_risk_label or "lower_workflow_risk"
         db_clips = session.query(Clip).filter(Clip.project_id == pid).all()
     finally:
         session.close()
+
+    # Filter active verified effects
+    active_effects = []
+    for eff in default_effects:
+        eff_id = eff.get("id") or eff.get("effect_id") or eff.get("type", "")
+        if eff_id in [
+            "film_grain", "grain",
+            "vignette",
+            "zoom", "punch_in_zoom",
+            "camera_shake", "shake",
+            "rgb_split", "rgb_glitch",
+            "vhs_noise", "vhs_retro"
+        ] and eff.get("enabled", True):
+            active_effects.append({
+                "id": eff_id,
+                "type": eff_id,
+                "intensity": float(eff.get("intensity", 0.5)),
+                "enabled": True,
+            })
+
+    from clipforge_core.services.effects_engine import apply_motion_effects
 
     clips_output_dir = project_dir / "clips"
     clips_output_dir.mkdir(parents=True, exist_ok=True)
@@ -165,12 +189,21 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                 output_path=out_video_path,
                 start_sec=start_s,
                 end_sec=end_s,
-                crop_mode="face_track",
+                crop_mode=crop_mode,
                 focal_x=focal_x,
                 caption_style=caption_style,
                 transcript_segments=transcript_segments,
                 output_thumbnail_path=out_thumb_path,
             )
+
+            # Apply project-wide default motion effects if selected
+            if active_effects:
+                apply_motion_effects(
+                    source_video_path=out_video_path,
+                    output_video_path=out_video_path,
+                    effects=active_effects,
+                    duration_sec=end_s - start_s,
+                )
 
             # Build and write Render Manifest
             manifest = build_render_manifest(
@@ -181,13 +214,15 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                 source_probe=source_probe,
                 start_sec=start_s,
                 end_sec=end_s,
-                crop_mode="face_track",
+                crop_mode=crop_mode,
                 focal_x=focal_x,
                 caption_style=caption_style,
                 editorial_template=editorial_template,
                 rights_basis=rights_basis,
+                source_risk_label=source_risk_label,
                 transformation_score=cand.get("transformation_score", 75),
                 transformation_breakdown=cand.get("transformation_breakdown", {}),
+                effect_layers=active_effects,
             )
 
             manifest_path = clips_output_dir / f"clip_{idx + 1}_manifest.json"

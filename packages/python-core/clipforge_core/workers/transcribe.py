@@ -202,7 +202,7 @@ def transcribe_audio(source_path: str, output_dir: str) -> dict:
 
 @celery_app.task(
     name="app.workers.transcribe.transcribe_source",
-    queue="transcribe",
+    queue="analysis",
     bind=True,
     max_retries=1,
     default_retry_delay=15,

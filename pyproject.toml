@@ -31,3 +31,8 @@ ignore = ["E501"]
 asyncio_mode = "auto"
 testpaths = ["packages/python-core", "apps/api", "apps/worker"]
 
+[dependency-groups]
+dev = [
+    "jsonschema>=4.26.0",
+]
+

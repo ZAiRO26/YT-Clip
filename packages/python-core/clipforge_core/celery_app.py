@@ -44,7 +44,6 @@ celery_app.conf.update(
         "clipforge_core.workers.select.*": {"queue": "llm"},
         "clipforge_core.workers.editorial.*": {"queue": "editorial"},
         "clipforge_core.workers.render.*": {"queue": "render"},
-        "clipforge_core.workers.crop.*": {"queue": "render"},
         "clipforge_core.workers.caption.*": {"queue": "render"},
         "clipforge_core.workers.thumbnail.*": {"queue": "render"},
         "clipforge_core.workers.qa.*": {"queue": "qa"},
@@ -63,12 +62,6 @@ celery_app.conf.update(
         Queue("render", default_exchange, routing_key="render"),
         Queue("qa", default_exchange, routing_key="qa"),
         Queue("default", default_exchange, routing_key="default"),
-        # Backward-compatible queue aliases
-        Queue("download", default_exchange, routing_key="download"),
-        Queue("transcribe", default_exchange, routing_key="transcribe"),
-        Queue("select", default_exchange, routing_key="select"),
-        Queue("crop", default_exchange, routing_key="crop"),
-        Queue("caption", default_exchange, routing_key="caption"),
     ),
 
     # Task execution settings

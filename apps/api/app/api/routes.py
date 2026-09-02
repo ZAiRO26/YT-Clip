@@ -16,6 +16,7 @@ integration will be added in Phase 4 with the frontend.
 import logging
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from clipforge_core.config import settings
 from clipforge_core.database import get_async_session
@@ -35,6 +36,7 @@ from clipforge_core.schemas import (
 )
 from clipforge_core.services.pipeline import create_pipeline_jobs, dispatch_pipeline, dispatch_reclip
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -164,7 +166,10 @@ async def create_project(
         min_length_sec=data.min_length_sec,
         max_length_sec=data.max_length_sec,
         aspect_ratio=data.aspect_ratio,
+        crop_mode=data.crop_mode,
         caption_style=data.caption_style,
+        default_effects=data.default_effects,
+        default_voice_id=data.default_voice_id,
         status="queued",
     )
     session.add(project)
@@ -313,8 +318,12 @@ async def list_projects(
         items.append(
             ProjectListItem(
                 id=p.id,
+                title=p.title,
                 source_type=p.source_type,
                 source_value=p.source_value,
+                rights_basis=p.rights_basis or "owned",
+                source_risk_label=p.source_risk_label or "lower_workflow_risk",
+                editorial_template=p.editorial_template or "explainer",
                 clip_count=p.clip_count,
                 status=p.status,
                 created_at=p.created_at,
@@ -375,7 +384,15 @@ async def update_clip(
     if not clip:
         raise HTTPException(status_code=404, detail="Clip not found")
 
-    clip.review_status = data.review_status
+    if data.review_status is not None:
+        clip.review_status = data.review_status
+    if data.start_sec is not None:
+        clip.start_sec = data.start_sec
+    if data.end_sec is not None:
+        clip.end_sec = data.end_sec
+    if data.reasoning is not None:
+        clip.reasoning = data.reasoning
+
     await session.commit()
     await session.refresh(clip)
 
@@ -446,6 +463,37 @@ async def regenerate_thumbnail(
     await session.refresh(clip)
 
     return clip
+
+
+@router.get("/clips/{clip_id}/download")
+async def download_clip(
+    clip_id: uuid.UUID,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Serve the clip file with Content-Disposition: attachment for automatic browser download."""
+    clip_result = await session.execute(select(Clip).where(Clip.id == clip_id))
+    clip = clip_result.scalar_one_or_none()
+    if not clip or not clip.file_url:
+        raise HTTPException(status_code=404, detail="Clip or video file not found")
+
+    rel_url = clip.file_url.replace("\\", "/")
+    if rel_url.startswith("media/"):
+        rel_url = rel_url[len("media/") :]
+
+    media_base = Path(settings.MEDIA_DIR).resolve()
+    file_path = media_base / rel_url
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File on disk not found")
+
+    filename = f"clip_{clip_id}.mp4"
+    return FileResponse(
+        path=str(file_path),
+        media_type="video/mp4",
+        filename=filename,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
 
 
 @router.post("/projects/{project_id}/export", response_model=MessageResponse)
@@ -743,8 +791,10 @@ async def rerender_single_clip(
     from pathlib import Path
 
     from clipforge_core.services.audio_mixer import mix_audio_tracks
+    from clipforge_core.services.effects_engine import apply_motion_effects
+    from clipforge_core.services.media_probe import probe_media
     from clipforge_core.services.music_library import ensure_synth_bed
-    from clipforge_core.services.render_engine import render_clip
+    from clipforge_core.services.render_engine import build_render_manifest, render_clip
     from clipforge_core.services.transformation_scorer import calculate_transformation_score
     from clipforge_core.services.tts_service import synthesize_voiceover
 
@@ -767,16 +817,38 @@ async def rerender_single_clip(
     voiceover_text = payload.get("voiceover_text")
     voice_id = payload.get("voice_id", "en-US-JennyNeural")
     music_track = payload.get("music_track")
+    raw_effects = payload.get("effects", [])
+
+    # Filter effects to active and verified effects (All 6 verified: film_grain, vignette, zoom, camera_shake, rgb_split, vhs_noise)
+    active_effects = []
+    for eff in raw_effects:
+        eff_id = eff.get("id") or eff.get("effect_id") or eff.get("type", "")
+        if eff_id in [
+            "film_grain", "grain",
+            "vignette",
+            "zoom", "punch_in_zoom",
+            "camera_shake", "shake",
+            "rgb_split", "rgb_glitch",
+            "vhs_noise", "vhs_retro"
+        ] and eff.get("enabled", True):
+            active_effects.append({
+                "id": eff_id,
+                "type": eff_id,
+                "intensity": float(eff.get("intensity", 0.5)),
+                "enabled": True,
+            })
 
     clips_dir = project_dir / "clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
     out_video_path = clips_dir / f"clip_{clip.id}_rerendered.mp4"
     out_thumb_path = clips_dir / f"clip_{clip.id}_thumb.jpg"
 
-    # Optional Voiceover synthesis
+    # Optional Voiceover synthesis (Local Kokoro TTS)
     vo_path = None
+    vo_asset_id = None
     if voiceover_text and voiceover_text.strip():
-        vo_path = clips_dir / f"vo_{clip.id}.mp3"
+        vo_asset_id = str(uuid.uuid4())
+        vo_path = clips_dir / f"vo_{clip.id}.wav"
         synthesize_voiceover(voiceover_text, voice_id=voice_id, output_path=vo_path)
 
     # Optional Music bed
@@ -805,9 +877,19 @@ async def rerender_single_clip(
         output_thumbnail_path=out_thumb_path,
     )
 
-    # If VO or Music present, mix into the rendered video
+    # Apply motion effects post-render if requested
+    if active_effects:
+        apply_motion_effects(
+            source_video_path=out_video_path,
+            output_video_path=out_video_path,
+            effects=active_effects,
+            duration_sec=end_sec - start_sec,
+        )
+
+    # If VO or Music present, mix into the rendered video and remux atomically
     if vo_path or bg_music_path:
         mixed_audio = clips_dir / f"mixed_{clip.id}.aac"
+        vo_delay = float(payload.get("voiceover_delay_sec", 0.5))
         mix_audio_tracks(
             source_video_path=out_video_path,
             output_audio_path=mixed_audio,
@@ -815,7 +897,52 @@ async def rerender_single_clip(
             end_sec=end_sec - start_sec,
             voiceover_path=vo_path,
             music_path=bg_music_path,
+            voiceover_delay_sec=vo_delay,
         )
+        # Remux mixed audio into out_video_path atomically
+        temp_muxed = clips_dir / f"clip_{clip.id}_muxed_temp.mp4"
+        mux_cmd = [
+            "ffmpeg", "-y",
+            "-i", str(out_video_path),
+            "-i", str(mixed_audio),
+            "-map", "0:v:0",
+            "-map", "1:a:0",
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-movflags", "+faststart",
+            str(temp_muxed),
+        ]
+        import subprocess
+        subprocess.run(mux_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        import os
+        os.replace(temp_muxed, out_video_path)
+
+    # Build and write updated manifest
+    import json
+    source_probe = probe_media(source_video)
+    manifest = build_render_manifest(
+        clip_id=str(clip.id),
+        project_id=str(project.id),
+        source_asset_id=str(uuid.uuid4()),
+        source_path=str(source_video),
+        source_probe=source_probe,
+        start_sec=start_sec,
+        end_sec=end_sec,
+        crop_mode=crop_mode,
+        focal_x=focal_x,
+        caption_style=caption_style,
+        editorial_template=project.editorial_template or "explainer",
+        rights_basis=project.rights_basis or "owned",
+        source_risk_label=project.source_risk_label or "lower_workflow_risk",
+        transformation_score=clip.transformation_score or 75,
+        transformation_breakdown=clip.transformation_breakdown or {},
+        effect_layers=active_effects,
+        audio_mode="mix" if vo_path else "original_only",
+        voiceover_asset_id=vo_asset_id,
+    )
+    manifest_path = clips_dir / f"clip_{clip.id}_manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
     # Calculate updated transformation score
     t_data = calculate_transformation_score(

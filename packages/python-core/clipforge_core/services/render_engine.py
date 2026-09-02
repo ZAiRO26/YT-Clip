@@ -33,12 +33,73 @@ def build_render_manifest(
     caption_style: str = "bold_karaoke",
     editorial_template: str = "explainer",
     rights_basis: str = "owned",
+    source_risk_label: str = "lower_workflow_risk",
     transformation_score: int = 75,
     transformation_breakdown: Dict[str, int] | None = None,
+    effect_layers: List[Dict[str, Any]] | None = None,
+    render_duration_sec: float | None = None,
+    audio_mode: str = "original_only",
+    voiceover_asset_id: str | None = None,
 ) -> Dict[str, Any]:
     """
     Builds deterministic render manifest conforming to docs/RENDER_MANIFEST_SCHEMA.json.
     """
+    src_w = source_probe.get("width", 1920)
+    src_h = source_probe.get("height", 1080)
+    crop_w_px = int(src_h * 9 / 16)  # 9:16 crop width from source height
+    crop_h_px = src_h
+    crop_x_px = int(max(0, src_w - crop_w_px) * max(0.0, min(1.0, focal_x)))
+    crop_y_px = 0
+
+    # Map editorial template if needed
+    ed_template = editorial_template
+    if ed_template == "campaign_promo":
+        ed_template = "campaign_promotion"
+    if ed_template not in ["explainer", "commentary", "news_context", "reaction_pip", "quote_breakdown", "campaign_promotion"]:
+        ed_template = "explainer"
+
+    # Map transformation breakdown to canonical schema keys with strict range bounds
+    tb = transformation_breakdown or {}
+    canon_tb = {
+        "rights_completeness": min(25, max(0, int(tb.get("rights_completeness", tb.get("narrative_structure", 20))))),
+        "editorial_contribution": min(30, max(0, int(tb.get("editorial_contribution", tb.get("commentary_depth", 22))))),
+        "visual_transformation": min(20, max(0, int(tb.get("visual_transformation", tb.get("visual_alteration", 20))))),
+        "clip_uniqueness": min(15, max(0, int(tb.get("clip_uniqueness", tb.get("source_exclusivity", 14))))),
+        "human_review": min(10, max(0, int(tb.get("human_review", tb.get("editorial_callouts", 10))))),
+    }
+
+    # Format schema-compliant effect layers
+    formatted_layers = []
+    if effect_layers:
+        for eff in effect_layers:
+            eff_type = eff.get("type") or eff.get("id") or eff.get("effect_id", "")
+            if eff_type == "zoom":
+                eff_type = "punch_in_zoom"
+            if eff_type in [
+                "punch_in_zoom", "camera_shake", "film_grain", "vignette",
+                "speed_ramp", "rgb_split", "vhs_noise", "background_blur",
+                "pixelate", "overlay_asset", "floating_cta", "dvd_bounce", "cta_lower_third"
+            ]:
+                formatted_layers.append({
+                    "type": eff_type,
+                    "enabled": eff.get("enabled", True),
+                    "intensity": min(1.0, max(0.0, float(eff.get("intensity", 0.5)))),
+                })
+
+    has_vo = (voiceover_asset_id is not None and str(voiceover_asset_id).strip() != "") or audio_mode in ["mix", "voiceover_only"]
+    manifest_audio_mode = audio_mode if audio_mode in ["original_only", "voiceover_only", "mix", "mute_original_keep_ambient"] else ("mix" if has_vo else "original_only")
+
+    metadata_obj = {
+        "renderer_version": "0.2.0",
+        "rendered_at": datetime.now(timezone.utc).isoformat(),
+        "transformation_score": transformation_score,
+        "transformation_breakdown": canon_tb,
+        "rights_basis": rights_basis,
+        "source_risk_label": source_risk_label if source_risk_label in ["lower_workflow_risk", "needs_review", "high_claim_risk", "unknown"] else "lower_workflow_risk",
+    }
+    if render_duration_sec is not None:
+        metadata_obj["render_duration_seconds"] = float(render_duration_sec)
+
     return {
         "manifest_version": "1.0.0",
         "clip_id": clip_id,
@@ -49,12 +110,13 @@ def build_render_manifest(
             "start_seconds": round(start_sec, 3),
             "end_seconds": round(end_sec, 3),
             "source_duration_seconds": source_probe.get("duration_sec", 0.0),
-            "source_width": source_probe.get("width", 1920),
-            "source_height": source_probe.get("height", 1080),
+            "source_width": src_w,
+            "source_height": src_h,
             "source_fps": source_probe.get("fps", 30.0),
             "source_codec": source_probe.get("video_codec", "h264"),
         },
         "output": {
+            "aspect_ratio": "9:16",
             "width": 1080,
             "height": 1920,
             "fps": 30.0,
@@ -66,45 +128,50 @@ def build_render_manifest(
             "audio_bitrate": "128k",
         },
         "crop": {
-            "mode": crop_mode,
+            "mode": crop_mode if crop_mode in ["center", "face_track", "manual", "blur_background"] else "center",
             "keyframes": [
                 {
                     "time_sec": 0.0,
-                    "x": round(focal_x, 3),
-                    "y": 0.5,
-                    "w": 0.5625,
-                    "h": 1.0,
+                    "x": crop_x_px,
+                    "y": crop_y_px,
+                    "w": crop_w_px,
+                    "h": crop_h_px,
                 }
             ],
-            "blur_radius": 25 if crop_mode == "blur_background" else 0,
+            "safe_text_zone": True,
         },
         "captions": {
             "enabled": caption_style != "none",
-            "style": caption_style,
+            "preset": caption_style if caption_style in ["bold_karaoke", "minimal", "clean_subtitle", "none"] else "bold_karaoke",
             "font_size": 68 if caption_style == "bold_karaoke" else 48,
-            "position": "bottom",
-            "primary_color": "#FFFFFF",
-            "highlight_color": "#FFFF00",
+            "position": "lower_safe_zone",
+            "font_color": "#FFFFFF",
         },
         "audio": {
-            "source_gain_db": 0.0,
-            "loudness_target_lufs": -14.0,
-            "ducking": False,
+            "mode": manifest_audio_mode,
+            "original_volume": 100,
+            "voiceover_volume": 100 if has_vo else 0,
+            "background_music_volume": 0,
+            "voiceover_asset_id": str(voiceover_asset_id) if (has_vo and voiceover_asset_id) else None,
+            "duck_original_under_voiceover": has_vo,
+            "normalize_loudness": True,
+            "target_lufs": -14.0,
         },
         "effects": {
-            "color_grade": "none",
-            "speed_multiplier": 1.0,
+            "safe_zones": True,
+            "layers": formatted_layers,
         },
         "editorial": {
-            "template": editorial_template,
-            "rights_basis": rights_basis,
-            "transformation_score": transformation_score,
-            "transformation_breakdown": transformation_breakdown or {},
+            "template": ed_template,
+            "hook_text": None,
+            "narration_script": None,
+            "narration_status": "none",
+            "requires_human_fact_check": False,
+            "callout_labels": [],
+            "source_attribution": None,
+            "cta_text": None,
         },
-        "metadata": {
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "renderer": "clipforge-ffmpeg-v2",
-        },
+        "metadata": metadata_obj,
     }
 
 

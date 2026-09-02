@@ -47,7 +47,10 @@ export interface Project {
   min_length_sec: number;
   max_length_sec: number;
   aspect_ratio: string;
+  crop_mode?: string;
   caption_style: string;
+  default_effects?: Array<{ id: string; intensity?: number }>;
+  default_voice_id?: string;
   status: string;
   created_at: string;
   jobs: JobStatus[];
@@ -96,7 +99,10 @@ export interface CreateProjectInput {
   min_length_sec?: number;
   max_length_sec?: number;
   aspect_ratio?: string;
+  crop_mode?: string;
   caption_style?: string;
+  default_effects?: Array<{ id: string; intensity?: number }>;
+  default_voice_id?: string;
   custom_prompt?: string | null;
   time_range_start?: number | null;
   time_range_end?: number | null;

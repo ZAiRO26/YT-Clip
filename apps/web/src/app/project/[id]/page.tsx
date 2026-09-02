@@ -171,9 +171,9 @@ function ClipCard({
                     ? "bg-cf-warn/15 text-cf-warn border-cf-warn/30"
                     : "bg-cf-muted/15 text-cf-muted border-border"
                 }`}
-                title="Viral Hook Potential"
+                title="Editorial Potential (Narrative & Hook Strength)"
               >
-                🔥 {(clip.score * 100).toFixed(0)}%
+                🎯 {(clip.score * 100).toFixed(0)}%
               </span>
             )}
           </div>
@@ -326,6 +326,22 @@ export default function ProjectDetailPage() {
       const res = await api.exportProjectClips(projectId, exportFolder);
       toast.success(res.message || "Export completed successfully");
       setShowExportModal(false);
+
+      // HIGH PRIORITY: Trigger automatic browser file download for each approved clip
+      const approvedClips = clips.filter((c) => c.review_status === "approved" && c.file_url);
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+      approvedClips.forEach((clip, index) => {
+        setTimeout(() => {
+          const downloadUrl = `${apiBase}/api/clips/${clip.id}/download`;
+          const a = document.createElement("a");
+          a.href = downloadUrl;
+          a.download = `clip_${clip.id}.mp4`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }, index * 400);
+      });
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to export clips");
     } finally {
