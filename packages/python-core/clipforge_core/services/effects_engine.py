@@ -207,7 +207,8 @@ def apply_motion_effects(
             ]
 
         logger.info(f"[EffectsEngine] Applying {len(active_filters)} effects: {applied_ids}")
-        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120, check=True)
+        fx_timeout = max(300, int(duration_sec * 5))
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=fx_timeout, check=True)
 
         # Atomically replace destination only after ffmpeg completes successfully (exit 0)
         import os

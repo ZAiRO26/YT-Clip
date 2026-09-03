@@ -235,9 +235,11 @@
      - **Live Pipeline Execution:** [x] Dispatched reclip pipeline for project `0a6e8175-d26d-4400-a9d0-bb1a9eaaec77` with `clip_count=20`.
      - **Browser Verification:** [x] Verified via subagent that the red error toast is gone, stale `transcribe` job status updated to `success`, the project status is actively **`Encoding...`**, and 15+ clips are actively being rendered and populated on the dashboard.
 
- 37. **Session 16 (Active-Speaker Face Tracking Execution & Multi-Batch Clip Numbering Fix):**
+ 37. **Session 16 (Active-Speaker Face Tracking, Dynamic Effects Timeout & README Update):**
      - **Active-Speaker Analysis Execution:** [x] Processed all 10 candidate clips from `LatentE05.mp4` with MediaPipe FaceMesh (468 landmarks), sampling lip-movement dynamics (Mouth Aspect Ratio variance) during transcript speech windows. Generated 1,684 timeline points and saved to `analysis.json`.
      - **Multi-Batch Clip Numbering & DB Matching:** [x] Enhanced `render_project_clips` in `packages/python-core/clipforge_core/workers/render.py` to match candidate clips to database records by exact timestamp ranges (`start_sec`, `end_sec`) and assign distinct sequential indices (`clip_6`, `clip_7`, etc.), preventing earlier batch clips from being overwritten.
+     - **Dynamic Effects Engine Timeout:** [x] Replaced hardcoded 120s timeout in `effects_engine.py` with dynamic duration scaling (`max(300, int(duration_sec * 5))`), allowing long clips (>60s) with multiple stacked visual effects to render without timing out.
+     - **Public Documentation Refresh:** [x] Updated `README.md` with comprehensive documentation of Active Speaker Tracking, Browser-Native Explorer, Ambient Music Studio, and Direct Local Export.
      - **Backend & Worker Recovery:** [x] Restored FastAPI backend server on port 8000 and launched Celery worker on Redis queue; actively encoding clips with speaker-aware 9:16 vertical crop, karaoke captions, and audio mastering.
 
 

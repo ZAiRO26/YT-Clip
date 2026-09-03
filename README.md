@@ -29,20 +29,23 @@ Everything runs on your local machine with **zero cloud subscription lock-in** a
 
 ## ⚡ Features
 
-### 👤 1. MediaPipe Smart Face-Tracking & 9:16 Reframing
-* **BlazeFace Detection:** Real-time speaker detection tracking facial coordinates across every frame.
-* **Exponential Smoothing:** Smooth camera pans ($\alpha = 0.25$) eliminating jittery cuts.
+### 👤 1. Active-Speaker Face Detection & Precision 9:16 Smart Reframing
+* **MediaPipe FaceMesh (468 Landmarks):** Active speaker identification analyzing lip movement dynamics (Mouth Aspect Ratio variance) correlated with word-level transcript speech intervals. Seamlessly tracks who is actually talking in multi-person scenes (panel shows, interviews, podcasts) rather than locking onto the nearest or largest face.
+* **BlazeFace Fast Detection:** Multi-face tracking sampling up to 6 simultaneous faces with low-resolution acceleration.
+* **Precision Face-Centering Formula:** Centers the speaker's face directly in the 9:16 crop window (`x_offset = max(0, min(src_w - crop_w, face_center_x - crop_w / 2))`) with exponential smoothing ($\alpha = 0.25$) to eliminate jittery cuts.
 * **Adaptive Framing Modes:** Choose between **Face Track 9:16**, **Blurred Ambient Background**, or **Center Crop**.
 
 ### 🎯 2. Editorial Discovery & Transformation Scoring
 * **AI Highlight Detection:** Uses local or cloud LLMs (Ollama, LM Studio, OpenAI, Claude, Gemini) to score moments based on *Hook Quality*, *Standalone Clarity*, and *Narrative Flow*.
 * **Canonical Editorial Metrics:** Ranks clips using `editorial_potential` ($50\%$) and `transformation_score` ($50\%$).
 * **6 Editorial Transformation Templates:** *Explainer*, *Commentary*, *News / Context*, *Reaction / PiP*, *Quote Breakdown*, and *Campaign Promo*.
+* **Multi-Batch Reclipping Engine:** Re-clip with custom counts (e.g., 20 clips), duration ranges, and aspect ratios from existing transcripts without re-transcribing, using collision-free sequential indexing (`clip_6`, `clip_7`...).
 
-### 🎙️ 3. Audio Studio & Offline Kokoro TTS Engine
+### 🎙️ 3. Audio Studio, Offline Kokoro TTS & Ambient Music Beds
 * **Zero-Cloud Local Speech:** Integrated `kokoro-onnx` generating human-grade narration in $\approx 0.5\text{s}$ on CPU.
 * **7 Studio Voice Personas:** Bella, Adam, Emma, George, Sarah, Michael, Nicole.
-* **Dynamic Sidechain Ducking:** Automatically attenuates background audio by $\approx -12\text{ dB}$ during speech with smooth fade recovery during pauses.
+* **Royalty-Free Ambient Music Library:** Mastered polyphonic background tracks (`ambient_focus`, `lofi_beats`, `upbeat_tech`, `epic_cinematic`) mastered to $-16\text{ LUFS}$.
+* **Dynamic Sidechain Ducking:** Automatically attenuates background audio by $-12\text{ dB}$ during speech with smooth fade recovery during pauses.
 * **EBU R128 Mastering:** Integrated dual-pass loudness normalization targeting broadcast standard ($-14.0\text{ LUFS}$).
 
 ### 💬 4. Subtitle Typography & Karaoke Presets
@@ -58,10 +61,11 @@ Everything runs on your local machine with **zero cloud subscription lock-in** a
   * 🌈 **RGB Glitch:** Native channel split with unshifted green channel for maximum text readability.
   * 📼 **VHS Retro:** Nostalgic analog color saturation and line jitter.
 
-### ⚖️ 6. Policy & Rights Compliance Layer
+### ⚖️ 6. Native Browser File Explorer & Direct Local Export
+* **Browser-Native Windows Explorer:** Instant HTML5 `<input type="file">` and `<input type="file" webkitdirectory>` folder pickers with zero focus locking or thread deadlocks, plus real-time file size and video count badges.
+* **Direct Silent Local Export:** 1-click export saving directly to dedicated project subfolders (`D:\Export\Project_Title\`) with numbered MP4s (`01_Clip.mp4`), thumbnails, and JSON manifests without browser popups.
 * **Rights Basis Tracking:** Categorizes projects into *Owned*, *Licensed*, *Permitted*, *Commentary/Fair-Use*, or *Unconfirmed*.
 * **Draft-07 Render Manifests:** Automatically produces verifiable JSON manifests recording source provenance, transformational score, and effect layers.
-* **One-Click Direct Export:** Sequential browser downloads for all approved clips.
 
 ---
 
@@ -149,9 +153,9 @@ flowchart TD
         W_DL["Download Worker (yt-dlp / Local)"]
         W_TR["Transcribe Worker (faster-whisper)"]
         W_SL["Select Worker (Editorial LLM)"]
-        W_FT["Face Tracker (MediaPipe BlazeFace)"]
+        W_FT["Face Tracker (MediaPipe FaceMesh 468 + MAR)"]
         W_RN["Render Worker (FFmpeg Reframing)"]
-        W_AU["Audio Studio (Kokoro TTS + Ducking)"]
+        W_AU["Audio Studio (Kokoro TTS + Ambient Beds + Ducking)"]
         W_FX["Effects Engine (6 Motion Filters)"]
     end
 
@@ -172,11 +176,11 @@ flowchart TD
 
 ## 🛠️ Tech Stack
 
-* **Frontend:** Next.js 16 (App Router, Turbopack), Tailwind CSS, Lucide Icons, TypeScript.
+* **Frontend:** Next.js 16 (App Router, Turbopack), Tailwind CSS, Lucide Icons, TypeScript, HTML5 Native File/Directory Explorer (`webkitdirectory`).
 * **Backend:** FastAPI, Pydantic v2, SQLAlchemy 2.0 (Asyncpg + Psycopg2), Alembic.
 * **Orchestration:** Celery 5.4, Redis 7.
-* **Speech & Audio:** Kokoro ONNX Runtime (`kokoro-onnx`), Faster-Whisper, FFmpeg `sidechaincompress` & `loudnorm`.
-* **Vision & Motion:** MediaPipe Face Detection, FFmpeg filter complex (`rgbashift`, `noise`, `vignette`, `zoompan`).
+* **Speech & Audio:** Kokoro ONNX Runtime (`kokoro-onnx`), Faster-Whisper, Polyphonic Synthesizer Engine, FFmpeg `sidechaincompress` & `loudnorm`.
+* **Vision & Motion:** MediaPipe FaceMesh (468 facial landmarks) + BlazeFace detection, PySceneDetect, FFmpeg filter complex (`rgbashift`, `noise`, `vignette`, `zoompan`).
 
 ---
 
