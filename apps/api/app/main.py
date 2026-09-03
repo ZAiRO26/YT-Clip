@@ -1,6 +1,6 @@
 """
 ClipForge AI — FastAPI Application Entry Point (v2)
-Configures structured logging, CORS, static mounts, /health, and /ready endpoints.
+Configures structured logging, CORS, static mounts, /health, /ready endpoints, and native file utilities.
 """
 import logging
 import sys

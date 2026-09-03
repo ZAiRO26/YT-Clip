@@ -551,6 +551,16 @@ async def reclip_project(
         session.add(job)
 
     project.status = "selecting"
+    if data.clip_count:
+        project.clip_count = data.clip_count
+    if data.min_length_sec:
+        project.min_length_sec = data.min_length_sec
+    if data.max_length_sec:
+        project.max_length_sec = data.max_length_sec
+    if data.aspect_ratio:
+        project.aspect_ratio = data.aspect_ratio
+    if data.caption_style:
+        project.caption_style = data.caption_style
     await session.commit()
 
     # Dispatch the reclip task
@@ -572,3 +582,34 @@ async def reclip_project(
         "task_id": task_id,
         "settings": data.model_dump(),
     }
+
+
+@router.post("/utils/browse-file")
+async def browse_local_file(title: str = "Select Video File", initial_dir: str | None = None):
+    """
+    Open native Windows Explorer file dialog to pick a local video file.
+    Returns the resolved absolute path on disk.
+    """
+    import asyncio
+    try:
+        from clipforge_core.services.file_picker import pick_file_sync
+        return await asyncio.to_thread(pick_file_sync, title=title, initial_dir=initial_dir)
+    except Exception as e:
+        logger.error(f"Error in browse_local_file: {e}")
+        return {"file_path": "", "cancelled": True, "error": str(e)}
+
+
+@router.post("/utils/browse-folder")
+async def browse_local_folder(title: str = "Select Destination Folder", initial_dir: str | None = None):
+    """
+    Open native Windows Explorer directory dialog to pick a local folder.
+    Returns the resolved absolute path on disk.
+    """
+    import asyncio
+    try:
+        from clipforge_core.services.file_picker import pick_folder_sync
+        return await asyncio.to_thread(pick_folder_sync, title=title, initial_dir=initial_dir)
+    except Exception as e:
+        logger.error(f"Error in browse_local_folder: {e}")
+        return {"folder_path": "", "cancelled": True, "error": str(e)}
+

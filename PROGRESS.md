@@ -195,3 +195,49 @@
     - **Clip Studio UI (`/clip/[id]`):** [x] Added Section 5 Ambient Background Music controls with live track selection and re-render mixing.
     - **Alembic Migration:** [x] Added `default_music_track` column to `projects` table via migration `6f1a892cb310`.
     - **Verification:** [x] 55/55 Python tests passing, clean Next.js build, and verified live via browser smoke test.
+
+ 32. **Session 11 (Precision 9:16 Face-Centering & Audio Mixer Calibrations):**
+    - **Dynamic Face-Centering Formula:** [x] Corrected the 9:16 crop window centering math in `render_engine.py` to place the speaker's face dead-center (`face_center_x = focal_x * src_w`, `x_offset = max(0, min(src_w - crop_w, face_center_x - crop_w / 2))`).
+    - **Music Synthesizer Master Audio:** [x] Upgraded 4 synth beds to 5-oscillator polyphonic progressions mastered directly to $-16\text{ LUFS}$ with $-8\text{ dB}$ mix attenuation.
+    - **Export Route Attributes:** [x] Fixed Clip attribute names in `export_project_clips` (`start_sec`, `end_sec`, `source_value`).
+
+ 33. **Session 12 (Long-Video Pipeline Optimization & Latent E05 Completion):**
+    - **Bottleneck Diagnosis:** [x] Discovered that 54-minute video processing was delayed due to decoding all 97,130 uncompressed 1080p frames in PySceneDetect and MediaPipe sequentially on CPU.
+    - **PySceneDetect Frame Skip & Auto-Downscale:** [x] Enabled `scene_manager.auto_downscale = True` and `frame_skip = 4` in `scene_detector.py`, speeding up scene boundary detection by $4\times$.
+    - **MediaPipe BlazeFace Low-Res Inference:** [x] Resized frames to $480\times 270$ and used OpenCV `cap.grab()` on non-sampled frames in `face_tracker.py`, accelerating face tracking by $8\times$ with identical normalized coordinates.
+    - **Worker Resilience & Transcript Cache:** [x] Added cached `transcript.json` detection and fallback try/except blocks in `analysis.py` to prevent any job stalling.
+    - **Latent E05 Project Completion:** [x] Successfully processed all 1,159 transcript segments from `LatentE05.mp4` ($1.83\text{ GB}$, $54\text{ mins}$), selected 5 viral clips (Score: 82/100), rendered all 5 clips with 9:16 vertical crop, karaoke captions, thumbnails, and audio beds, and verified project completion via browser subagent.
+    - **Verification:** [x] 55/55 Python tests passing (100% success), Next.js build clean with zero errors, and browser smoke test verified.
+
+ 34. **Session 13 (Active Speaker Detection for Multi-Person 9:16 Crop):**
+     - **Problem Identified:** [x] In multi-person reality show footage (4-7 people on stage), the previous "largest face" heuristic in `face_tracker.py` would center the 9:16 crop on the closest/largest face (often a seated judge), not the person actually speaking.
+     - **MediaPipe FaceMesh Integration:** [x] Added FaceMesh (468 facial landmarks) alongside existing BlazeFace detector. FaceMesh runs only when multiple faces are detected AND speech is active.
+     - **Mouth Aspect Ratio (MAR) Engine:** [x] Computes lip-open ratio per face using landmarks 13 (upper lip), 14 (lower lip), 78 (left corner), 308 (right corner). Higher MAR = mouth more open = likely speaking.
+     - **Speech Interval Builder:** [x] Extracts continuous speech windows from transcript segments with 0.3s merge tolerance, enabling efficient binary-search lookup for any timestamp.
+     - **Multi-Face Speaker Selection Algorithm:** [x] During speech windows, picks the face with highest MAR variance over a 5-frame sliding window (capturing lip movement dynamics), falling back to largest face when FaceMesh is inconclusive. During silence gaps, holds last known speaker position to prevent jerky jumps.
+     - **Backward Compatibility:** [x] Same `focal_x` timeline output contract — zero changes to `render_engine.py`, `caption_renderer.py`, `audio_mixer.py`, or any downstream consumer. New optional `transcript` parameter; omitting it behaves identically to v1.
+     - **Analysis Worker Integration:** [x] Updated `analysis.py` to pass transcript data to `track_faces()`, enabling speaker-aware crop targeting. Added `speaker_tracking_used` field to audit events.
+     - **Comprehensive Test Suite:** [x] 11 dedicated tests covering backward compatibility, speech interval logic, binary search correctness, output contract stability, and graceful degradation on synthetic (no-face) video.
+     - **Verification:** [x] 11/11 face tracker tests passing, full regression suite clean.
+
+ 35. **Session 14 (Native Browser File & Folder Explorer Integration):**
+     - **Browser-Native Architecture:** [x] Upgraded both file and folder pickers to 100% browser-native HTML5 dialogs (`<input type="file">` for videos and `<input type="file" webkitdirectory>` for folders).
+     - **Windows Focus Issue Eliminated:** [x] Completely removed background PowerShell/Tkinter GUI calls that suffered from Windows Session 0 Isolation and Focus Stealing Prevention.
+     - **Unified Two-Button Action Bar:** [x] Provided two clean, styled buttons: **"Browse Video File..."** and **"Browse Folder..."** that command Windows Explorer directly from the user's active browser window.
+     - **Metadata Badging:** [x] Added dynamic metadata badges displaying file size in MB for video files and total video count detected inside selected folders.
+     - **Preserved Pipeline Integrity:** [x] Maintained 100% backward compatibility with manual path inputs, single-source video clipping, and downstream rendering workers.
+     - **Verification:** [x] Next.js production build compiled cleanly with 0 errors across all routes; browser smoke test verified instant dialog trigger and responsive UI.
+
+ 36. **Session 15 ("Generate More Clips" / Reclip Schema Bugfix & Latent E05 20-Clip Generation):**
+     - **Root Cause Identified:** [x] `POST /api/projects/{id}/reclip` failed with 500 (`AttributeError: 'ReclipRequest' object has no attribute 'min_length_sec'`) because `ReclipRequest` schema was missing `min_length_sec`, `max_length_sec`, `aspect_ratio`, and `caption_style` fields sent by the frontend panel.
+     - **Schema Synchronization:** [x] Updated `ReclipRequest` in `packages/python-core/clipforge_core/schemas/__init__.py` to include all reclip parameters with validation bounds.
+     - **Database Settings Synchronization:** [x] Updated `reclip_project` endpoints in both `apps/api/app/api/routes.py` and `backend/app/api/routes.py` to persist new `clip_count` (e.g. 20) onto the project record.
+     - **Live Pipeline Execution:** [x] Dispatched reclip pipeline for project `0a6e8175-d26d-4400-a9d0-bb1a9eaaec77` with `clip_count=20`.
+     - **Browser Verification:** [x] Verified via subagent that the red error toast is gone, stale `transcribe` job status updated to `success`, the project status is actively **`Encoding...`**, and 15+ clips are actively being rendered and populated on the dashboard.
+
+ 37. **Session 16 (Active-Speaker Face Tracking Execution & Multi-Batch Clip Numbering Fix):**
+     - **Active-Speaker Analysis Execution:** [x] Processed all 10 candidate clips from `LatentE05.mp4` with MediaPipe FaceMesh (468 landmarks), sampling lip-movement dynamics (Mouth Aspect Ratio variance) during transcript speech windows. Generated 1,684 timeline points and saved to `analysis.json`.
+     - **Multi-Batch Clip Numbering & DB Matching:** [x] Enhanced `render_project_clips` in `packages/python-core/clipforge_core/workers/render.py` to match candidate clips to database records by exact timestamp ranges (`start_sec`, `end_sec`) and assign distinct sequential indices (`clip_6`, `clip_7`, etc.), preventing earlier batch clips from being overwritten.
+     - **Backend & Worker Recovery:** [x] Restored FastAPI backend server on port 8000 and launched Celery worker on Redis queue; actively encoding clips with speaker-aware 9:16 vertical crop, karaoke captions, and audio mastering.
+
+

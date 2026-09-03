@@ -23,10 +23,11 @@ def detect_scenes(video_path: str | Path, threshold: float = 27.0) -> List[Dict[
 
     video = open_video(str(path))
     scene_manager = SceneManager()
+    scene_manager.auto_downscale = True
     scene_manager.add_detector(ContentDetector(threshold=threshold))
 
-    # Detect cut scenes
-    scene_manager.detect_scenes(video)
+    # Detect cut scenes with 4-frame skipping for 4x speedup on long videos
+    scene_manager.detect_scenes(video, frame_skip=4)
     scene_list = scene_manager.get_scene_list()
 
     scenes = []

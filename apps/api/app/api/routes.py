@@ -685,6 +685,16 @@ async def reclip_project(
         session.add(job)
 
     project.status = "selecting"
+    if data.clip_count:
+        project.clip_count = data.clip_count
+    if data.min_length_sec:
+        project.min_length_sec = data.min_length_sec
+    if data.max_length_sec:
+        project.max_length_sec = data.max_length_sec
+    if data.aspect_ratio:
+        project.aspect_ratio = data.aspect_ratio
+    if data.caption_style:
+        project.caption_style = data.caption_style
     await session.commit()
 
     # Dispatch the reclip task
@@ -1088,7 +1098,12 @@ async def retry_project_stage(
 
     if stage in ("select", "llm"):
         from clipforge_core.workers.select import select_clips
-        select_clips.delay(project_id=project_id)
+        select_clips.delay(
+            project_id=project_id,
+            clip_count=project.clip_count or 5,
+            min_length_sec=project.min_length_sec or 20,
+            max_length_sec=project.max_length_sec or 60,
+        )
     elif stage in ("render", "crop", "caption"):
         from clipforge_core.workers.render import render_project_clips
         render_project_clips.delay(project_id=project_id)
@@ -1107,5 +1122,30 @@ async def cleanup_project_artifacts(project_id: str):
     from clipforge_core.services.cleanup import cleanup_project_temp_files
     res = cleanup_project_temp_files(project_id=project_id, max_age_hours=0.0)
     return res
+
+
+@router.post("/utils/browse-file")
+async def browse_local_file(title: str = "Select Video File", initial_dir: str | None = None):
+    """
+    Open native Windows Explorer file dialog to pick a local video file.
+    Returns the resolved absolute path on disk.
+    """
+    from clipforge_core.services.file_picker import pick_file_sync
+    import asyncio
+    result = await asyncio.to_thread(pick_file_sync, title=title, initial_dir=initial_dir)
+    return result
+
+
+@router.post("/utils/browse-folder")
+async def browse_local_folder(title: str = "Select Destination Folder", initial_dir: str | None = None):
+    """
+    Open native Windows Explorer directory dialog to pick a local folder.
+    Returns the resolved absolute path on disk.
+    """
+    from clipforge_core.services.file_picker import pick_folder_sync
+    import asyncio
+    result = await asyncio.to_thread(pick_folder_sync, title=title, initial_dir=initial_dir)
+    return result
+
 
 

@@ -205,6 +205,10 @@ class ClipUpdate(BaseModel):
 
 class ReclipRequest(BaseModel):
     clip_count: int = Field(default=5, ge=1, le=20)
+    min_length_sec: int = Field(default=20, ge=5, le=300)
+    max_length_sec: int = Field(default=60, ge=10, le=600)
+    aspect_ratio: str = Field(default="9:16", pattern="^(9:16|1:1|16:9)$")
+    caption_style: str = Field(default="bold_karaoke")
     custom_prompt: str | None = Field(default=None, description="Guidance for new clips")
     time_range_start: float | None = Field(default=None, description="Start time in seconds")
     time_range_end: float | None = Field(default=None, description="End time in seconds")

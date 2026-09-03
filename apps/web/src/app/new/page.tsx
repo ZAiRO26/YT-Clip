@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type CampaignBrief, type CreateProjectInput } from "@/lib/api";
 import { RIGHTS_DECLARATIONS, type RightsBasis, type EditorialTemplate } from "@clipforge/contracts";
@@ -39,6 +39,64 @@ export default function NewProjectPage() {
   const [customPrompt, setCustomPrompt] = useState("");
   const [timeRangeStart, setTimeRangeStart] = useState("");
   const [timeRangeEnd, setTimeRangeEnd] = useState("");
+  const [selectionBadge, setSelectionBadge] = useState<{
+    type: "file" | "folder";
+    name: string;
+    detail?: string;
+  } | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    setSelectionBadge({
+      type: "file",
+      name: file.name,
+      detail: `${sizeMb} MB`,
+    });
+    // If user already had a path like D:\Videos\, update the filename
+    if (sourceValue && (sourceValue.includes("\\") || sourceValue.includes("/"))) {
+      const lastSlash = Math.max(sourceValue.lastIndexOf("\\"), sourceValue.lastIndexOf("/"));
+      const dir = sourceValue.slice(0, lastSlash + 1);
+      setSourceValue(dir + file.name);
+    } else {
+      setSourceValue(file.name);
+    }
+  };
+
+  const handleFolderSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const firstFile = files[0];
+    const relativePath = firstFile.webkitRelativePath || "";
+    const folderName = relativePath.split("/")[0] || "Selected Folder";
+
+    const videoExtensions = [".mp4", ".mkv", ".mov", ".webm", ".avi", ".ts"];
+    let videoCount = 0;
+    for (let i = 0; i < files.length; i++) {
+      const name = files[i].name.toLowerCase();
+      if (videoExtensions.some((ext) => name.endsWith(ext))) {
+        videoCount++;
+      }
+    }
+
+    setSelectionBadge({
+      type: "folder",
+      name: folderName,
+      detail: `${videoCount} video${videoCount === 1 ? "" : "s"} found`,
+    });
+
+    if (sourceValue && (sourceValue.includes("\\") || sourceValue.includes("/"))) {
+      const lastSlash = Math.max(sourceValue.lastIndexOf("\\"), sourceValue.lastIndexOf("/"));
+      const dir = sourceValue.slice(0, lastSlash + 1);
+      setSourceValue(dir + folderName);
+    } else {
+      setSourceValue(folderName);
+    }
+  };
 
   const toggleEffect = (effId: string) => {
     setSelectedEffects((prev) =>
@@ -343,17 +401,98 @@ export default function NewProjectPage() {
                 Local File / Folder
               </button>
             </div>
-            <input
-              type="text"
-              value={sourceValue}
-              onChange={(e) => setSourceValue(e.target.value)}
-              placeholder={
-                sourceType === "youtube_url"
-                  ? "https://www.youtube.com/watch?v=..."
-                  : "D:\\Videos\\my-video.mp4"
-              }
-              className="w-full rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground placeholder:text-cf-muted/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all"
-            />
+
+            {sourceType === "youtube_url" ? (
+              <input
+                type="text"
+                value={sourceValue}
+                onChange={(e) => setSourceValue(e.target.value)}
+                placeholder="https://www.youtube.com/watch?v=..."
+                className="w-full rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground placeholder:text-cf-muted/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all"
+              />
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    value={sourceValue}
+                    onChange={(e) => setSourceValue(e.target.value)}
+                    placeholder="D:\Videos\my-video.mp4"
+                    className="flex-1 rounded-lg border border-border bg-card px-4 py-2.5 text-sm text-foreground placeholder:text-cf-muted/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all"
+                  />
+                  {/* Hidden browser native file inputs */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelected}
+                    accept="video/mp4,video/mkv,video/mov,video/webm,video/avi,video/*"
+                    className="hidden"
+                  />
+                  <input
+                    type="file"
+                    ref={folderInputRef}
+                    onChange={handleFolderSelected}
+                    // @ts-expect-error webkitdirectory is standard in Chromium/Firefox
+                    webkitdirectory=""
+                    directory=""
+                    className="hidden"
+                  />
+
+                  {/* 100% Browser-Native Action Buttons */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-primary/40 bg-primary/15 hover:bg-primary/25 text-primary text-xs font-semibold transition-all whitespace-nowrap shadow-sm"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="12" y1="18" x2="12" y2="12" />
+                      <line x1="9" y1="15" x2="15" y2="15" />
+                    </svg>
+                    Browse Video File...
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => folderInputRef.current?.click()}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border bg-card hover:bg-surface text-cf-muted hover:text-foreground text-xs font-medium transition-all whitespace-nowrap"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    </svg>
+                    Browse Folder...
+                  </button>
+                </div>
+
+                {selectionBadge && (
+                  <div className="flex items-center gap-2 p-2.5 rounded-lg bg-primary/10 border border-primary/20 text-primary text-xs font-medium">
+                    {selectionBadge.type === "file" ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 shrink-0 text-cf-success">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <polyline points="22 4 12 14.01 9 11.01" />
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 shrink-0 text-primary">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                      </svg>
+                    )}
+                    <span>
+                      Selected {selectionBadge.type === "file" ? "Video File" : "Folder"}: <strong>{selectionBadge.name}</strong>
+                      {selectionBadge.detail && <span className="text-cf-muted ml-2">({selectionBadge.detail})</span>}
+                    </span>
+                  </div>
+                )}
+
+                <p className="text-[11px] text-cf-muted flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3 w-3 text-cf-success">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 14 14" />
+                  </svg>
+                  Click <strong>Browse Video File...</strong> to choose a single video, <strong>Browse Folder...</strong> to select a folder, or paste the file path directly.
+                </p>
+              </div>
+            )}
           </section>
 
           {/* Output & Length Settings */}

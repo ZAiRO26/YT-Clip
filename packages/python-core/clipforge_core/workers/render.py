@@ -134,7 +134,7 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
         editorial_template = project.editorial_template or "explainer"
         rights_basis = project.rights_basis or "owned"
         source_risk_label = project.source_risk_label or "lower_workflow_risk"
-        db_clips = session.query(Clip).filter(Clip.project_id == pid).all()
+        db_clips = session.query(Clip).filter(Clip.project_id == pid).order_by(Clip.created_at, Clip.id).all()
     finally:
         session.close()
 
@@ -170,7 +170,24 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
         for idx, cand in enumerate(candidate_clips):
             start_s = cand.get("start_sec", 0.0)
             end_s = cand.get("end_sec", start_s + 30.0)
-            clip_id = str(db_clips[idx].id) if idx < len(db_clips) else str(uuid.uuid4())
+
+            # Match to specific DB clip by time range or sequential order
+            matched_clip = None
+            for c in db_clips:
+                if abs(float(c.start_sec) - start_s) < 0.2 and abs(float(c.end_sec) - end_s) < 0.2:
+                    matched_clip = c
+                    break
+
+            if matched_clip:
+                clip_id = str(matched_clip.id)
+                clip_num = db_clips.index(matched_clip) + 1
+            elif idx < len(db_clips):
+                matched_clip = db_clips[idx]
+                clip_id = str(matched_clip.id)
+                clip_num = idx + 1
+            else:
+                clip_id = str(uuid.uuid4())
+                clip_num = len(db_clips) + idx + 1
 
             # Determine focal point for this clip's time range
             clip_focal_points = [
@@ -183,8 +200,8 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                 else 0.5
             )
 
-            out_video_path = clips_output_dir / f"clip_{idx + 1}.mp4"
-            out_thumb_path = clips_output_dir / f"clip_{idx + 1}_thumb.jpg"
+            out_video_path = clips_output_dir / f"clip_{clip_num}.mp4"
+            out_thumb_path = clips_output_dir / f"clip_{clip_num}_thumb.jpg"
 
             # Execute rendering
             render_res = render_clip(
@@ -213,10 +230,10 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                 try:
                     import os
                     import subprocess
-                    bg_music_path = clips_output_dir / f"music_{idx + 1}.aac"
+                    bg_music_path = clips_output_dir / f"music_{clip_num}.aac"
                     ensure_synth_bed(default_music_track, bg_music_path, duration_sec=end_s - start_s)
 
-                    mixed_audio = clips_output_dir / f"mixed_{idx + 1}.aac"
+                    mixed_audio = clips_output_dir / f"mixed_{clip_num}.aac"
                     mix_audio_tracks(
                         source_video_path=out_video_path,
                         output_audio_path=mixed_audio,
@@ -225,7 +242,7 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                         music_path=bg_music_path,
                     )
 
-                    temp_muxed = clips_output_dir / f"clip_{idx + 1}_muxed_temp.mp4"
+                    temp_muxed = clips_output_dir / f"clip_{clip_num}_muxed_temp.mp4"
                     mux_cmd = [
                         "ffmpeg", "-y",
                         "-i", str(out_video_path),
@@ -241,7 +258,7 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                     subprocess.run(mux_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
                     os.replace(temp_muxed, out_video_path)
                 except Exception as e:
-                    logger.warning(f"[Render Worker] Failed to mix default background music for clip {idx + 1}: {e}")
+                    logger.warning(f"[Render Worker] Failed to mix default background music for clip {clip_num}: {e}")
 
             # Build and write Render Manifest
             manifest = build_render_manifest(
@@ -263,7 +280,7 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                 effect_layers=active_effects,
             )
 
-            manifest_path = clips_output_dir / f"clip_{idx + 1}_manifest.json"
+            manifest_path = clips_output_dir / f"clip_{clip_num}_manifest.json"
             manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
             # Relative media paths for web client
@@ -288,7 +305,7 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
 
             rendered_results.append({
                 "clip_id": clip_id,
-                "clip_number": idx + 1,
+                "clip_number": clip_num,
                 "file_url": rel_file_url,
                 "thumbnail_url": rel_thumb_url,
                 "duration_sec": render_res["duration_sec"],

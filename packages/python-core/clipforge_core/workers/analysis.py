@@ -102,17 +102,45 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
         raise FileNotFoundError(error_msg)
 
     try:
-        # Step 1: Faster-Whisper Transcription
-        logger.info(f"[Analysis] Transcribing audio for project {project_id}")
-        transcript = transcribe_audio(str(video_file), str(project_dir))
+        # Step 1: Faster-Whisper Transcription (or load existing cached transcript)
+        transcript_file = project_dir / "transcript.json"
+        if transcript_file.exists():
+            logger.info(f"[Analysis] Found existing transcript.json for project {project_id}, reusing cached transcript")
+            transcript = json.loads(transcript_file.read_text(encoding="utf-8"))
+        else:
+            logger.info(f"[Analysis] Transcribing audio for project {project_id}")
+            transcript = transcribe_audio(str(video_file), str(project_dir))
 
-        # Step 2: Scene Detection
-        logger.info(f"[Analysis] Detecting scenes for project {project_id}")
-        scenes = detect_scenes(video_file)
+        # Step 2: Scene Detection with graceful fallback
+        try:
+            logger.info(f"[Analysis] Detecting scenes for project {project_id}")
+            scenes = detect_scenes(video_file)
+        except Exception as e:
+            logger.warning(f"[Analysis] Scene detection warning: {e}. Defaulting to continuous scene.")
+            scenes = [{
+                "scene_id": 1,
+                "start_sec": 0.0,
+                "end_sec": transcript.get("duration_sec", 60.0),
+                "duration_sec": transcript.get("duration_sec", 60.0),
+                "start_frame": 0,
+                "end_frame": int(transcript.get("duration_sec", 60.0) * 30),
+            }]
 
-        # Step 3: Face & Subject Tracking
-        logger.info(f"[Analysis] Tracking face coordinates for project {project_id}")
-        face_data = track_faces(video_file)
+        # Step 3: Face & Subject Tracking with active speaker detection
+        try:
+            logger.info(f"[Analysis] Tracking face coordinates for project {project_id}")
+            face_data = track_faces(video_file, transcript=transcript)
+        except Exception as e:
+            logger.warning(f"[Analysis] Face tracking warning: {e}. Defaulting to center-crop.")
+            face_data = {
+                "timeline": [],
+                "average_focal_x": 0.5,
+                "std_dev_focal_x": 0.0,
+                "total_samples": 0,
+                "faces_detected_samples": 0,
+                "detection_rate": 0.0,
+                "fallback_used": True,
+            }
 
         analysis_result = {
             "project_id": project_id,
@@ -137,6 +165,7 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
                     "segment_count": len(transcript.get("segments", [])),
                     "scene_count": len(scenes),
                     "face_fallback_used": face_data.get("fallback_used", False),
+                    "speaker_tracking_used": face_data.get("speaker_tracking_used", False),
                     "language": transcript.get("language", "unknown"),
                     "duration_sec": transcript.get("duration_sec", 0.0),
                 },
