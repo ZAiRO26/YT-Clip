@@ -242,4 +242,18 @@
      - **Public Documentation Refresh:** [x] Updated `README.md` with comprehensive documentation of Active Speaker Tracking, Browser-Native Explorer, Ambient Music Studio, and Direct Local Export.
      - **Backend & Worker Recovery:** [x] Restored FastAPI backend server on port 8000 and launched Celery worker on Redis queue; actively encoding clips with speaker-aware 9:16 vertical crop, karaoke captions, and audio mastering.
 
+ 38. **Session 17 (Timeline Window, Temporal Binning, Content Focus & Boundary-Aware Duration Clamping):**
+     - **Boundary-Aware Duration Clamping:** [x] Implemented `clamp_to_boundary()` in `packages/python-core/clipforge_core/services/candidate_ranker.py` using Whisper segment ends and PySceneDetect cut points within a 5.0s tolerance window. Only falls back to raw chop when no valid boundary exists, logging it explicitly. Added upper-cap guard (`min(target_end + tolerance_sec, start_sec + max_length_sec)`) preventing under-length extension from exceeding `max_length_sec`.
+     - **Deterministic Clamp Tests:** [x] Authored `packages/python-core/tests/test_duration_clamp.py` with 5 deterministic tests: sentence boundary snap (119s -> 1324.2s), raw fallback warning logging, under-length extension (10s -> 71.5s), max duration cap guard, and in-bounds pass-through.
+     - **Dynamic Temporal Binning Engine:** [x] Created `packages/python-core/clipforge_core/services/temporal_binner.py` implementing `compute_temporal_bins()` with dynamic bin counts (`max(1, round(duration / 600))`) and `divmod` remainder distribution, guaranteeing `sum(quota) == clip_count` across all scenarios.
+     - **Spread Verification & Bin Membership Tests:** [x] Authored `packages/python-core/tests/test_temporal_binner.py` (9 tests) verifying dynamic binning on 15-min (3 clips), 90-min (15 clips), 54-min (5 clips), and 8-min (10 clips), timeline spread assertion (`80.6%` measured on 54-min video >= 80% requirement), and post-LLM bin-membership validation.
+     - **Post-LLM Bin Membership Validation:** [x] Implemented `validate_bin_membership()` in `temporal_binner.py` and wired into `select.py` to programmatically detect, reassign, or discard out-of-bin candidates post-LLM.
+     - **Content Focus Prompt Directives:** [x] Injected structured directives in `select.py` for `balanced` (50/50 mix), `contestant_primary` (≥70% acts/punchlines), and `judges_primary` (≥70% roasts/banter).
+     - **Database Migration:** [x] Created and applied Alembic migration `7a1b2c3d4e5f_add_project_time_window_and_focus.py` adding `time_range_start`, `time_range_end`, `temporal_distribution`, and `content_focus` columns to `projects` table with check constraints.
+     - **Scope Confirmation:** [x] Confirmed active v2 architecture (`apps/api/`, `apps/web/`, `packages/python-core/`); left legacy `backend/` and `frontend/` untouched.
+     - **Rights Basis Policy:** [x] Formally documented India's Got Latent test content as `other_unconfirmed` / `high_claim_risk` for internal pipeline testing only.
+     - **Frontend Studio UI:** [x] Added Section 5 (Timeline Window & Selection Strategy) to `apps/web/src/app/new/page.tsx` with MM:SS inputs, Content Focus mode tiles, Temporal Distribution strategy tiles, and a Strict Hard Duration Guarantee badge. Added matching controls to the Reclip Modal in `apps/web/src/app/project/[id]/page.tsx`.
+     - **Full Test Verification:** [x] Ran complete workspace test suite: **82 passed in 163.96s** (100% pass rate). Next.js TypeScript check clean with 0 errors.
+
+
 

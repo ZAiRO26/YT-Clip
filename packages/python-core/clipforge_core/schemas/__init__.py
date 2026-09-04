@@ -117,6 +117,8 @@ class ProjectCreate(BaseModel):
     custom_prompt: str | None = Field(default=None, description="Optional custom prompt to guide clip selection")
     time_range_start: float | None = Field(default=None, description="Optional start time in seconds")
     time_range_end: float | None = Field(default=None, description="Optional end time in seconds")
+    temporal_distribution: str = Field(default="even_spread", pattern="^(even_spread|focus_window|top_moments)$", description="Timeline distribution strategy")
+    content_focus: str = Field(default="balanced", pattern="^(balanced|contestant_primary|judges_primary)$", description="Content focus mode")
 
 
 class JobStatus(BaseModel):
@@ -152,6 +154,10 @@ class ProjectResponse(BaseModel):
     default_effects: list[dict[str, Any]] = Field(default_factory=list)
     default_voice_id: str = "af_bella"
     default_music_track: str = "none"
+    time_range_start: float | None = None
+    time_range_end: float | None = None
+    temporal_distribution: str = "even_spread"
+    content_focus: str = "balanced"
     status: str
     created_at: datetime
     jobs: list[JobStatus] = []
@@ -212,6 +218,8 @@ class ReclipRequest(BaseModel):
     custom_prompt: str | None = Field(default=None, description="Guidance for new clips")
     time_range_start: float | None = Field(default=None, description="Start time in seconds")
     time_range_end: float | None = Field(default=None, description="End time in seconds")
+    temporal_distribution: str = Field(default="even_spread", pattern="^(even_spread|focus_window|top_moments)$", description="Timeline distribution strategy")
+    content_focus: str = Field(default="balanced", pattern="^(balanced|contestant_primary|judges_primary)$", description="Content focus mode")
 
 
 class ThumbnailRequest(BaseModel):

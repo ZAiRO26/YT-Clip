@@ -1,8 +1,106 @@
 """
-ClipForge AI — Candidate Ranking & Scene Snapping Service
-Deduplicates candidate clips, snaps start/end times to nearest scene cut boundaries, and sorts by composite score.
+ClipForge AI — Candidate Ranking, Scene Snapping & Duration Clamping Service
+Deduplicates candidate clips, snaps start/end times to nearest scene cut boundaries,
+enforces min/max duration via boundary-aware clamping, and sorts by composite score.
 """
-from typing import Any, Dict, List
+import logging
+from typing import Any, Dict, List, Tuple
+
+logger = logging.getLogger(__name__)
+
+
+def clamp_to_boundary(
+    start_sec: float,
+    end_sec: float,
+    max_length_sec: float,
+    min_length_sec: float,
+    transcript_segments: List[Dict[str, Any]],
+    scenes: List[Dict[str, Any]],
+    tolerance_sec: float = 5.0,
+) -> Tuple[float, float, str]:
+    """
+    Clamp a clip's duration to [min_length_sec, max_length_sec] by finding
+    the nearest valid sentence-end or scene-cut boundary.
+
+    Returns (clamped_start, clamped_end, clamp_method) where clamp_method
+    is one of: 'none', 'sentence_boundary', 'scene_boundary', 'raw_fallback'.
+    """
+    duration = end_sec - start_sec
+
+    # --- OVER-LENGTH CLAMPING ---
+    if duration > max_length_sec:
+        hard_limit = start_sec + max_length_sec
+        search_floor = hard_limit - tolerance_sec
+
+        # Strategy 1: Find nearest Whisper segment end at or before hard_limit
+        best_sentence_end = None
+        for seg in transcript_segments:
+            seg_end = seg.get("end", 0.0)
+            if search_floor <= seg_end <= hard_limit:
+                if best_sentence_end is None or seg_end > best_sentence_end:
+                    best_sentence_end = seg_end
+
+        if best_sentence_end is not None:
+            return start_sec, round(best_sentence_end, 2), "sentence_boundary"
+
+        # Strategy 2: Find nearest scene-cut end at or before hard_limit
+        best_scene_end = None
+        for scene in scenes:
+            scene_end = scene.get("end_sec", 0.0)
+            if search_floor <= scene_end <= hard_limit:
+                if best_scene_end is None or scene_end > best_scene_end:
+                    best_scene_end = scene_end
+
+        if best_scene_end is not None:
+            return start_sec, round(best_scene_end, 2), "scene_boundary"
+
+        # Strategy 3: Raw fallback — log explicitly
+        logger.warning(
+            f"[DurationClamp] No sentence or scene boundary found within "
+            f"{tolerance_sec}s of hard limit {hard_limit:.1f}s for clip "
+            f"[{start_sec:.1f}s-{end_sec:.1f}s]. Using raw chop fallback."
+        )
+        return start_sec, round(hard_limit, 2), "raw_fallback"
+
+    # --- UNDER-LENGTH CLAMPING ---
+    if duration < min_length_sec:
+        target_end = start_sec + min_length_sec
+        # Guard: never extend past max_length_sec even when fixing under-length
+        upper_cap = start_sec + max_length_sec
+
+        # Find nearest sentence end at or after target_end (capped at upper_cap)
+        best_sentence_end = None
+        for seg in transcript_segments:
+            seg_end = seg.get("end", 0.0)
+            if target_end <= seg_end <= min(target_end + tolerance_sec, upper_cap):
+                if best_sentence_end is None or seg_end < best_sentence_end:
+                    best_sentence_end = seg_end
+
+        if best_sentence_end is not None:
+            return start_sec, round(best_sentence_end, 2), "sentence_boundary"
+
+        # Scene-boundary extension (capped at upper_cap)
+        best_scene_end = None
+        for scene in scenes:
+            scene_end = scene.get("end_sec", 0.0)
+            if target_end <= scene_end <= min(target_end + tolerance_sec, upper_cap):
+                if best_scene_end is None or scene_end < best_scene_end:
+                    best_scene_end = scene_end
+
+        if best_scene_end is not None:
+            return start_sec, round(best_scene_end, 2), "scene_boundary"
+
+        # Raw fallback — extend to exactly min_length_sec (capped at upper_cap)
+        fallback_end = min(target_end, upper_cap)
+        logger.warning(
+            f"[DurationClamp] No boundary found to extend under-length clip "
+            f"[{start_sec:.1f}s-{end_sec:.1f}s] to {min_length_sec}s. "
+            f"Using raw extension fallback."
+        )
+        return start_sec, round(fallback_end, 2), "raw_fallback"
+
+    # Duration is within bounds
+    return start_sec, end_sec, "none"
 
 
 def snap_to_scene_boundaries(

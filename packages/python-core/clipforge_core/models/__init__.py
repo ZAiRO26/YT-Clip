@@ -79,6 +79,12 @@ class Project(Base):
     rights_notes = Column(Text, nullable=True)
     source_risk_label = Column(Text, nullable=False, server_default=text("'lower_workflow_risk'"))
 
+    # Timeline Window & Selection Strategy (v2.1)
+    time_range_start = Column(Float, nullable=True)
+    time_range_end = Column(Float, nullable=True)
+    temporal_distribution = Column(Text, nullable=False, server_default=text("'even_spread'"))
+    content_focus = Column(Text, nullable=False, server_default=text("'balanced'"))
+
     status = Column(Text, nullable=False, server_default=text("'queued'"))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
@@ -96,6 +102,14 @@ class Project(Base):
         CheckConstraint(
             "rights_basis IN ('owned', 'written_permission', 'authorized_campaign', 'commentary_review', 'other_unconfirmed')",
             name="ck_projects_rights_basis",
+        ),
+        CheckConstraint(
+            "temporal_distribution IN ('even_spread', 'focus_window', 'top_moments')",
+            name="ck_projects_temporal_distribution",
+        ),
+        CheckConstraint(
+            "content_focus IN ('balanced', 'contestant_primary', 'judges_primary')",
+            name="ck_projects_content_focus",
         ),
         Index("idx_projects_owner_created", "owner_id", created_at.desc()),
     )

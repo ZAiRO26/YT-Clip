@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { api, VoiceoverContext } from "@/lib/api";
 
 interface ClipDetail {
   id: string;
@@ -41,6 +42,14 @@ export default function ClipEditorPage() {
   const [selectedEffects, setSelectedEffects] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"preview" | "split">("preview");
 
+  // Voiceover Auto-Draft Script State
+  const [voiceoverContext, setVoiceoverContext] = useState<VoiceoverContext | null>(null);
+  const [generatingScript, setGeneratingScript] = useState(false);
+  const [scriptStyle, setScriptStyle] = useState<"hook_intro" | "explainer" | "hype_reaction" | "outro_cta">("hook_intro");
+  const [voiceoverStartOffsetSec, setVoiceoverStartOffsetSec] = useState<number>(0.5);
+  const [unverifiedWarning, setUnverifiedWarning] = useState<string | null>(null);
+  const [flaggedWords, setFlaggedWords] = useState<string[]>([]);
+
   const fetchClip = useCallback(async () => {
     try {
       const res = await fetch(`http://localhost:8000/api/projects/${projectId}/clips`);
@@ -55,6 +64,14 @@ export default function ClipEditorPage() {
           setMusicTrack(found.render_manifest.music_track);
         }
       }
+
+      // Fetch voiceover context and silence gap intelligence
+      try {
+        const ctx = await api.getClipVoiceoverContext(clipId);
+        setVoiceoverContext(ctx);
+      } catch (err) {
+        console.warn("Could not fetch voiceover context:", err);
+      }
     } catch (e) {
       toast.error("Failed to load clip details");
     } finally {
@@ -68,6 +85,7 @@ export default function ClipEditorPage() {
 
   const [savingMetadata, setSavingMetadata] = useState(false);
   const [videoVersion, setVideoVersion] = useState(Date.now());
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
 
   const handleSaveMetadata = async () => {
     try {
@@ -104,6 +122,31 @@ export default function ClipEditorPage() {
     toast.success("Download started");
   };
 
+  const handleAutoDraftScript = async (style: "hook_intro" | "explainer" | "hype_reaction" | "outro_cta") => {
+    try {
+      setGeneratingScript(true);
+      setScriptStyle(style);
+      const res = await api.generateVoiceoverScript(clipId, style);
+      setVoiceoverText(res.script);
+      setVoiceoverStartOffsetSec(res.start_offset_sec);
+      if ((res as any).audio_preview_url) {
+        setAudioPreviewUrl((res as any).audio_preview_url);
+      }
+      if (res.has_unverified_claim && res.warning) {
+        setUnverifiedWarning(res.warning);
+        setFlaggedWords(res.flagged_words || []);
+      } else {
+        setUnverifiedWarning(null);
+        setFlaggedWords([]);
+      }
+      toast.success(`Generated ${res.word_count}-word ${style.replace("_", " ")} script!`);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to generate script");
+    } finally {
+      setGeneratingScript(false);
+    }
+  };
+
   const handleRerender = async () => {
     try {
       setRerendering(true);
@@ -114,6 +157,8 @@ export default function ClipEditorPage() {
         crop_mode: cropMode,
         voice_id: voiceId,
         voiceover_text: voiceoverText,
+        voiceover_style: scriptStyle,
+        voiceover_start_offset_sec: voiceoverStartOffsetSec,
         music_track: musicTrack,
         effects: selectedEffects.map((e) => ({ id: e, intensity: 0.5 })),
       };
@@ -366,10 +411,186 @@ export default function ClipEditorPage() {
           <section className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-primary uppercase tracking-wider">4. Voiceover &amp; TTS Narration</h3>
-              <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded">
+              <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded flex items-center gap-1">
                 ⚡ Local Kokoro TTS
               </span>
             </div>
+
+            {/* Auto-Draft Script Toolbar */}
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  ✨ Auto-Draft Script
+                </span>
+                <span className="text-[10px] text-cf-muted">
+                  Grounded strictly in transcript dialogue
+                </span>
+              </div>
+
+              {/* 4 Style Pills */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {[
+                  {
+                    id: "hook_intro",
+                    label: "⚡ Hook Intro",
+                    badge: "6–9 words",
+                    desc: "First 3s punchy hook",
+                    disabled: false,
+                  },
+                  {
+                    id: "explainer",
+                    label: "📖 Explainer",
+                    badge: "15–20 words",
+                    desc: "Context over pause gap",
+                    disabled: voiceoverContext ? !voiceoverContext.has_qualifying_gap : false,
+                    disabledReason: "Requires ≥3s pause",
+                  },
+                  {
+                    id: "hype_reaction",
+                    label: "🔥 Hype Reaction",
+                    badge: "12–16 words",
+                    desc: "Climax reaction overlay",
+                    disabled: false,
+                  },
+                  {
+                    id: "outro_cta",
+                    label: "💬 Outro CTA",
+                    badge: "8–11 words",
+                    desc: "Closing CTA hook",
+                    disabled: false,
+                  },
+                ].map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    disabled={s.disabled || generatingScript}
+                    onClick={() => handleAutoDraftScript(s.id as any)}
+                    className={`p-2 rounded-lg text-left transition-all border relative flex flex-col justify-between ${
+                      s.disabled
+                        ? "opacity-40 cursor-not-allowed bg-surface border-border text-cf-muted"
+                        : scriptStyle === s.id && voiceoverText
+                        ? "bg-primary/20 border-primary text-foreground shadow-sm shadow-primary/20"
+                        : "bg-surface hover:bg-surface-raised border-border text-foreground hover:border-primary/40"
+                    }`}
+                  >
+                    <div>
+                      <div className="text-[11px] font-semibold leading-tight">{s.label}</div>
+                      <div className="text-[9px] text-cf-muted mt-0.5">{s.badge}</div>
+                    </div>
+                    {s.disabled && s.disabledReason && (
+                      <span className="text-[8px] text-amber-400 mt-1 block">
+                        ⚠️ {s.disabledReason}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {generatingScript && (
+                <div className="flex items-center gap-2 text-xs text-primary animate-pulse py-1">
+                  <div className="h-3 w-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  Generating script grounded in transcript snippet...
+                </div>
+              )}
+            </div>
+
+            {/* Side-by-Side: Source Transcript Snippet & Script Editor */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {/* Left Column: Source Transcript Snippet */}
+              <div className="rounded-lg bg-surface/80 border border-border p-3 space-y-1.5 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-[11px] font-medium text-cf-muted">
+                    <span className="flex items-center gap-1">💬 Source Transcript Snippet</span>
+                    <span>[{startSec.toFixed(1)}s – {endSec.toFixed(1)}s]</span>
+                  </div>
+                  <div className="text-xs text-foreground/90 mt-1.5 italic bg-background/50 p-2.5 rounded border border-border/50 max-h-28 overflow-y-auto leading-relaxed">
+                    {voiceoverContext?.transcript_snippet ? (
+                      `“${voiceoverContext.transcript_snippet}”`
+                    ) : (
+                      <span className="text-cf-muted not-italic">
+                        No dialogue recorded in this clip window (visual performance).
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-cf-muted pt-1 border-t border-border/40">
+                  <span>
+                    {voiceoverContext?.has_qualifying_gap
+                      ? `🟢 Pause detected (${voiceoverContext.gaps[0]?.duration_sec}s)`
+                      : "⚪ Continuous dialogue (No ≥3s gap)"}
+                  </span>
+                  <span>{voiceoverContext?.segments?.length || 0} segments</span>
+                </div>
+              </div>
+
+              {/* Right Column: AI Script Editor */}
+              <div className="space-y-1.5 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-[11px] font-medium text-cf-muted">
+                    <div className="flex items-center gap-2">
+                      <span>Drafted Voiceover Script</span>
+                      {audioPreviewUrl && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const audio = new Audio(`http://localhost:8000/${audioPreviewUrl}?t=${Date.now()}`);
+                            audio.play();
+                            toast.success("Playing Kokoro audio preview...");
+                          }}
+                          className="bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 transition"
+                        >
+                          ▶️ Listen to Preview
+                        </button>
+                      )}
+                    </div>
+                    <span className={`text-[10px] ${
+                      voiceoverText.split(/\s+/).filter(Boolean).length > 20
+                        ? "text-amber-400"
+                        : "text-emerald-400"
+                    }`}>
+                      {voiceoverText.split(/\s+/).filter(Boolean).length} words · ~{(voiceoverText.split(/\s+/).filter(Boolean).length / 2.8).toFixed(1)}s
+                    </span>
+                  </div>
+                  <textarea
+                    value={voiceoverText}
+                    onChange={(e) => {
+                      setVoiceoverText(e.target.value);
+                      if (unverifiedWarning) setUnverifiedWarning(null);
+                    }}
+                    rows={3}
+                    placeholder="Enter original commentary to voice over with Kokoro (or use Auto-Draft above)..."
+                    className="w-full rounded-lg bg-background border border-border p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary leading-relaxed"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-cf-muted">
+                  <span className="flex items-center gap-1">
+                    📍 Audio placement starts at: <strong className="text-foreground">{voiceoverStartOffsetSec.toFixed(1)}s</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setVoiceoverText("")}
+                    className="text-[10px] text-cf-muted hover:text-foreground transition"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Unverified Claim Warning Banner */}
+            {unverifiedWarning && (
+              <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-2.5 flex items-start gap-2 text-xs text-amber-200">
+                <span className="text-base leading-none">⚠️</span>
+                <div>
+                  <strong className="font-semibold block text-amber-300">Unverified Claim Warning</strong>
+                  <span className="text-[11px] text-amber-200/90 leading-tight block mt-0.5">
+                    {unverifiedWarning}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Voice Selector */}
             <div>
               <label className="text-xs text-cf-muted block mb-1">Studio Voice Persona</label>
               <select
@@ -377,24 +598,14 @@ export default function ClipEditorPage() {
                 onChange={(e) => setVoiceId(e.target.value)}
                 className="w-full rounded-lg bg-background border border-border px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               >
-                <option value="af_bella">Bella — Warm & Engaging Explainer (US Female)</option>
-                <option value="am_adam">Adam — Dynamic & Authoritative Host (US Male)</option>
-                <option value="bf_emma">Emma — Thoughtful News & Commentary (UK Female)</option>
-                <option value="bm_george">George — Documentary & Storyteller (UK Male)</option>
-                <option value="af_sarah">Sarah — Clear & Polished Narrator (US Female)</option>
-                <option value="am_michael">Michael — Conversational & Podcast Host (US Male)</option>
-                <option value="af_nicole">Nicole — Relaxed & Natural Dialogue (US Female)</option>
+                <option value="af_bella">Bella — Warm &amp; Engaging Explainer (US Female)</option>
+                <option value="am_adam">Adam — Dynamic &amp; Authoritative Host (US Male)</option>
+                <option value="bf_emma">Emma — Thoughtful News &amp; Commentary (UK Female)</option>
+                <option value="bm_george">George — Documentary &amp; Storyteller (UK Male)</option>
+                <option value="af_sarah">Sarah — Clear &amp; Polished Narrator (US Female)</option>
+                <option value="am_michael">Michael — Conversational &amp; Podcast Host (US Male)</option>
+                <option value="af_nicole">Nicole — Relaxed &amp; Natural Dialogue (US Female)</option>
               </select>
-            </div>
-            <div>
-              <label className="text-xs text-cf-muted block mb-1">Original Commentary Script</label>
-              <textarea
-                value={voiceoverText}
-                onChange={(e) => setVoiceoverText(e.target.value)}
-                rows={3}
-                placeholder="Enter original commentary to be voiced over with Kokoro (ducks source audio by ~-12dB)..."
-                className="w-full rounded-lg bg-background border border-border p-3 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-              />
             </div>
           </section>
 

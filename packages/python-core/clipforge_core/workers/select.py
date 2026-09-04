@@ -20,8 +20,9 @@ from clipforge_core.celery_app import celery_app
 from clipforge_core.config import settings
 from clipforge_core.database import get_sync_session
 from clipforge_core.models import Clip, Job, Project, ProjectAuditEvent
-from clipforge_core.services.candidate_ranker import deduplicate_and_rank_candidates
+from clipforge_core.services.candidate_ranker import clamp_to_boundary, deduplicate_and_rank_candidates
 from clipforge_core.services.llm_client import LLMClientError, llm_client
+from clipforge_core.services.temporal_binner import compute_temporal_bins, format_bin_directives, validate_bin_membership
 from clipforge_core.services.transformation_scorer import calculate_transformation_score
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,29 @@ EDITORIAL PRINCIPLES:
 You MUST respond with valid JSON matching the requested schema exactly. No markdown fences, no conversational text."""
 
 
+# Content focus prompt directives
+_CONTENT_FOCUS_DIRECTIVES = {
+    "balanced": (
+        "Select a balanced mix of clips: include both performer/contestant acts "
+        "(setups, performances, punchlines) AND host/judge reactions (commentary, "
+        "banter, roasts). Aim for roughly equal representation."
+    ),
+    "contestant_primary": (
+        "PRIORITIZE contestant/performer moments: their setups, acts, performances, "
+        "jokes, and audience reactions to their work. In acts/windows where no active "
+        "contestant performance is occurring (e.g., initial host/panel introductions, "
+        "or final host wrap-up and award announcements), select the best highlight "
+        "moment for that act. Every assigned act must have a clip selected."
+    ),
+    "judges_primary": (
+        "PRIORITIZE judge/host/panel moments: their commentary, roasts, banter, "
+        "reactions, and discussions. Include contestant content only when the "
+        "performance itself is the setup for a judge reaction. At least 70% of "
+        "clips should feature judges/hosts as the primary subject."
+    ),
+}
+
+
 def _build_selection_prompt(
     transcript: dict,
     scenes: list,
@@ -49,8 +73,10 @@ def _build_selection_prompt(
     min_length_sec: int,
     max_length_sec: int,
     custom_prompt: str | None = None,
+    temporal_bins_directive: str = "",
+    content_focus: str = "balanced",
 ) -> str:
-    """Build structured LLM prompt."""
+    """Build structured LLM prompt with optional temporal and content focus directives."""
     segments = transcript.get("segments", [])
     formatted_segments = []
     for seg in segments:
@@ -61,6 +87,10 @@ def _build_selection_prompt(
 
     transcript_text = "\n".join(formatted_segments)
     total_duration = transcript.get("duration_sec", 0.0)
+
+    # Build optional sections
+    focus_directive = _CONTENT_FOCUS_DIRECTIVES.get(content_focus, _CONTENT_FOCUS_DIRECTIVES["balanced"])
+    temporal_section = f"\n{temporal_bins_directive}\n" if temporal_bins_directive else ""
 
     prompt = f"""## SOURCE VIDEO INFORMATION
 - Total Duration: {total_duration:.1f}s
@@ -77,14 +107,19 @@ def _build_selection_prompt(
 ## CAMPAIGN BRIEF
 {json.dumps(campaign_brief, indent=2)}
 
+## CONTENT FOCUS
+{focus_directive}
+{temporal_section}
 ## USER GUIDANCE
 {custom_prompt if custom_prompt else "Identify the most engaging standalone moments matching the campaign brief and editorial template."}
 
 ## TASK
 Select up to {clip_count} highlight candidates.
-- Each clip duration MUST be between {min_length_sec} and {max_length_sec} seconds.
+- Target clip duration: nominally {min_length_sec} to {max_length_sec} seconds (the boundary-aware clamp engine will snap to valid boundaries). If a key exchange or routine naturally extends longer, provide the full natural scene range.
 - Clips should not overlap.
 - Hook Type must be one of: "question", "bold_statement", "surprising_stat", "story_loop", "controversial_thesis".
+- Keep reasoning brief (1 short sentence) and suggested_callouts concise.
+- Output JSON directly without any conversational preamble or thinking text.
 
 ## REQUIRED JSON FORMAT
 Return a JSON object:
@@ -167,6 +202,8 @@ def select_clips(
     custom_prompt: str | None = None,
     time_range_start: float | None = None,
     time_range_end: float | None = None,
+    temporal_distribution: str = "even_spread",
+    content_focus: str = "balanced",
 ) -> Dict[str, Any]:
     """
     Candidate selection task running on the 'llm' queue.
@@ -204,6 +241,14 @@ def select_clips(
         editorial_template = project.editorial_template or "explainer"
         rights_basis = project.rights_basis or "owned"
         campaign_brief = project.campaign_brief.brief_json if project.campaign_brief else {}
+        if time_range_start is None and project.time_range_start is not None:
+            time_range_start = project.time_range_start
+        if time_range_end is None and project.time_range_end is not None:
+            time_range_end = project.time_range_end
+        if temporal_distribution == "even_spread" and getattr(project, "temporal_distribution", None):
+            temporal_distribution = project.temporal_distribution
+        if content_focus == "balanced" and getattr(project, "content_focus", None):
+            content_focus = project.content_focus
     finally:
         session.close()
 
@@ -217,6 +262,21 @@ def select_clips(
         ]
         transcript["segments"] = filtered_segs
 
+    # Compute temporal bins for even spread
+    temporal_bins_directive = ""
+    temporal_bins = []
+    total_source_dur_for_bins = transcript.get("duration_sec", 60.0)
+    if temporal_distribution == "even_spread" and clip_count > 1:
+        effective_start = time_range_start or 0.0
+        effective_end = time_range_end or total_source_dur_for_bins
+        temporal_bins = compute_temporal_bins(
+            total_duration_sec=total_source_dur_for_bins,
+            clip_count=clip_count,
+            time_range_start=effective_start,
+            time_range_end=effective_end,
+        )
+        temporal_bins_directive = format_bin_directives(temporal_bins)
+
     # Build prompt
     prompt = _build_selection_prompt(
         transcript=transcript,
@@ -228,6 +288,8 @@ def select_clips(
         min_length_sec=min_length_sec,
         max_length_sec=max_length_sec,
         custom_prompt=custom_prompt,
+        temporal_bins_directive=temporal_bins_directive,
+        content_focus=content_focus,
     )
 
     try:
@@ -252,10 +314,25 @@ def select_clips(
         total_source_dur = transcript.get("duration_sec", 60.0)
 
         # Compute transformation score and enrich candidates
+        transcript_segments = transcript.get("segments", [])
+
         enriched_candidates = []
+        clamp_stats = {"none": 0, "sentence_boundary": 0, "scene_boundary": 0, "raw_fallback": 0}
         for raw in raw_clips:
             start_s = float(raw.get("start_sec", 0.0))
             end_s = float(raw.get("end_sec", start_s + min_length_sec))
+
+            # Boundary-aware duration enforcement
+            start_s, end_s, clamp_method = clamp_to_boundary(
+                start_sec=start_s,
+                end_sec=end_s,
+                max_length_sec=max_length_sec,
+                min_length_sec=min_length_sec,
+                transcript_segments=transcript_segments,
+                scenes=scenes,
+            )
+            clamp_stats[clamp_method] = clamp_stats.get(clamp_method, 0) + 1
+
             duration = end_s - start_s
 
             t_score_data = calculate_transformation_score(
@@ -274,6 +351,9 @@ def select_clips(
             cand = {
                 "start_sec": round(start_s, 2),
                 "end_sec": round(end_s, 2),
+                "raw_start_sec": round(float(raw.get("start_sec", 0.0)), 2),
+                "raw_end_sec": round(float(raw.get("end_sec", 0.0)), 2),
+                "raw_duration_sec": round(float(raw.get("end_sec", 0.0)) - float(raw.get("start_sec", 0.0)), 2),
                 "title": raw.get("title", f"Clip @ {int(start_s)}s"),
                 "hook_type": raw.get("hook_type", "bold_statement"),
                 "hook_text": raw.get("hook_text", ""),
@@ -285,8 +365,22 @@ def select_clips(
                 "transformation_band": t_score_data["band"],
                 "reasoning": raw.get("reasoning", "Strong highlight candidate matching editorial template"),
                 "suggested_callouts": raw.get("suggested_callouts", []),
+                "clamp_method": clamp_method,
             }
             enriched_candidates.append(cand)
+
+        logger.info(f"[LLM Select] Clamp stats: {clamp_stats}")
+
+        # Bin-membership validation for even_spread mode
+        if temporal_bins and temporal_distribution == "even_spread":
+            enriched_candidates, bin_violations = validate_bin_membership(
+                enriched_candidates, temporal_bins
+            )
+            if bin_violations:
+                logger.warning(
+                    f"[LLM Select] {len(bin_violations)} candidates discarded "
+                    f"due to bin-membership violations"
+                )
 
         # Snap to scene cut boundaries and deduplicate
         final_clips = deduplicate_and_rank_candidates(enriched_candidates, scenes=scenes)

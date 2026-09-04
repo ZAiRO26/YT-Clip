@@ -129,8 +129,10 @@ def dispatch_pipeline(project_id: str, project: Project) -> str:
             min_length_sec=project.min_length_sec,
             max_length_sec=project.max_length_sec,
             custom_prompt=None,
-            time_range_start=None,
-            time_range_end=None,
+            time_range_start=project.time_range_start,
+            time_range_end=project.time_range_end,
+            temporal_distribution=project.temporal_distribution,
+            content_focus=project.content_focus,
         ),
         render_project_clips.si(
             project_id=project_id,
@@ -152,6 +154,8 @@ def dispatch_reclip(
     custom_prompt: str | None = None,
     time_range_start: float | None = None,
     time_range_end: float | None = None,
+    temporal_distribution: str = "even_spread",
+    content_focus: str = "balanced",
 ) -> str:
     """
     Re-run select -> render pipeline.
@@ -167,6 +171,8 @@ def dispatch_reclip(
             custom_prompt=custom_prompt,
             time_range_start=time_range_start,
             time_range_end=time_range_end,
+            temporal_distribution=temporal_distribution,
+            content_focus=content_focus,
         ),
         render_project_clips.si(project_id=project_id),
     )

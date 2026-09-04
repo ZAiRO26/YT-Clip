@@ -39,6 +39,30 @@ export default function NewProjectPage() {
   const [customPrompt, setCustomPrompt] = useState("");
   const [timeRangeStart, setTimeRangeStart] = useState("");
   const [timeRangeEnd, setTimeRangeEnd] = useState("");
+  const [temporalDistribution, setTemporalDistribution] = useState<"even_spread" | "focus_window" | "top_moments">("even_spread");
+  const [contentFocus, setContentFocus] = useState<"balanced" | "contestant_primary" | "judges_primary">("balanced");
+  const [windowStartMm, setWindowStartMm] = useState("");
+  const [windowStartSs, setWindowStartSs] = useState("");
+  const [windowEndMm, setWindowEndMm] = useState("");
+  const [windowEndSs, setWindowEndSs] = useState("");
+
+  const updateTimeWindow = (sMm: string, sSs: string, eMm: string, eSs: string) => {
+    const sMin = parseFloat(sMm) || 0;
+    const sSec = parseFloat(sSs) || 0;
+    if (sMm !== "" || sSs !== "") {
+      setTimeRangeStart((sMin * 60 + sSec).toString());
+    } else {
+      setTimeRangeStart("");
+    }
+
+    const eMin = parseFloat(eMm) || 0;
+    const eSec = parseFloat(eSs) || 0;
+    if (eMm !== "" || eSs !== "") {
+      setTimeRangeEnd((eMin * 60 + eSec).toString());
+    } else {
+      setTimeRangeEnd("");
+    }
+  };
   const [selectionBadge, setSelectionBadge] = useState<{
     type: "file" | "folder";
     name: string;
@@ -180,6 +204,8 @@ export default function NewProjectPage() {
         default_effects: selectedEffects.map((e) => ({ id: e, intensity: 0.5 })),
         default_voice_id: voiceId,
         default_music_track: defaultMusicTrack,
+        temporal_distribution: temporalDistribution,
+        content_focus: contentFocus,
       };
 
       if (customPrompt.trim()) {
@@ -697,10 +723,194 @@ export default function NewProjectPage() {
             </div>
           </section>
 
+          {/* Section 5: Timeline Window & Selection Strategy */}
+          <section className="space-y-4 rounded-xl border border-border bg-surface p-5">
+            <div>
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold">5. Timeline Window &amp; Selection Strategy</h2>
+                <span className="text-[10px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded font-mono">
+                  Smart Spread
+                </span>
+              </div>
+              <p className="text-xs text-cf-muted mt-1">
+                Control where across the show clips are drawn from, balance contestant acts vs judge banter, and guarantee clip duration.
+              </p>
+            </div>
+
+            {/* 5A: Content Focus Mode */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-cf-muted block">Content Focus Mode</label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {[
+                  {
+                    id: "balanced",
+                    label: "🎭 Balanced Mix",
+                    desc: "Equal representation of contestant acts & judge banter",
+                  },
+                  {
+                    id: "contestant_primary",
+                    label: "🎤 Contestant Acts",
+                    desc: "Focus on performances, setups, punchlines (≥70% contestant clips)",
+                  },
+                  {
+                    id: "judges_primary",
+                    label: "⚖️ Judges Reactions",
+                    desc: "Focus on roasts, banter, facial reactions, commentary (≥70% judge clips)",
+                  },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setContentFocus(f.id as any)}
+                    className={`p-3 rounded-lg border text-left transition-all ${
+                      contentFocus === f.id
+                        ? "border-primary bg-primary/10 ring-1 ring-primary/50 text-primary"
+                        : "border-border bg-card text-cf-muted hover:border-border/80"
+                    }`}
+                  >
+                    <span className="text-xs font-semibold block">{f.label}</span>
+                    <span className="text-[10px] text-cf-muted block mt-0.5">{f.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 5B: Timeline Distribution Strategy */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-cf-muted block">Timeline Distribution Strategy</label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {[
+                  {
+                    id: "even_spread",
+                    label: "🌐 Dynamic Temporal Binning",
+                    desc: "Spreads clips evenly across entire timeline into chronological acts",
+                  },
+                  {
+                    id: "focus_window",
+                    label: "🎯 Custom Time Window",
+                    desc: "Extract clips strictly within a specific timeframe (e.g. 40:00 to 50:00)",
+                  },
+                  {
+                    id: "top_moments",
+                    label: "⚡ Top Moments Only",
+                    desc: "Extracts highest scoring moments anywhere without temporal binning",
+                  },
+                ].map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setTemporalDistribution(s.id as any)}
+                    className={`p-3 rounded-lg border text-left transition-all ${
+                      temporalDistribution === s.id
+                        ? "border-primary bg-primary/10 ring-1 ring-primary/50 text-primary"
+                        : "border-border bg-card text-cf-muted hover:border-border/80"
+                    }`}
+                  >
+                    <span className="text-xs font-semibold block">{s.label}</span>
+                    <span className="text-[10px] text-cf-muted block mt-0.5">{s.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 5C: Time Window Selector (shown when focus_window selected) */}
+            {temporalDistribution === "focus_window" && (
+              <div className="rounded-lg bg-card/50 border border-border p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-foreground">Timeline Window (MM:SS)</span>
+                  <span className="text-[10px] text-cf-muted">Clips will only be extracted between these timestamps</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[11px] text-cf-muted block mb-1">Window Start (Min : Sec)</label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="MM"
+                        value={windowStartMm}
+                        onChange={(e) => {
+                          setWindowStartMm(e.target.value);
+                          updateTimeWindow(e.target.value, windowStartSs, windowEndMm, windowEndSs);
+                        }}
+                        className="w-20 rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground font-mono focus:border-primary focus:outline-none"
+                      />
+                      <span className="text-cf-muted font-bold">:</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="59"
+                        placeholder="SS"
+                        value={windowStartSs}
+                        onChange={(e) => {
+                          setWindowStartSs(e.target.value);
+                          updateTimeWindow(windowStartMm, e.target.value, windowEndMm, windowEndSs);
+                        }}
+                        className="w-20 rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground font-mono focus:border-primary focus:outline-none"
+                      />
+                      {timeRangeStart && (
+                        <span className="text-[10px] text-cf-muted font-mono ml-2">({timeRangeStart}s)</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] text-cf-muted block mb-1">Window End (Min : Sec)</label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="MM"
+                        value={windowEndMm}
+                        onChange={(e) => {
+                          setWindowEndMm(e.target.value);
+                          updateTimeWindow(windowStartMm, windowStartSs, e.target.value, windowEndSs);
+                        }}
+                        className="w-20 rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground font-mono focus:border-primary focus:outline-none"
+                      />
+                      <span className="text-cf-muted font-bold">:</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="59"
+                        placeholder="SS"
+                        value={windowEndSs}
+                        onChange={(e) => {
+                          setWindowEndSs(e.target.value);
+                          updateTimeWindow(windowStartMm, windowStartSs, windowEndMm, e.target.value);
+                        }}
+                        className="w-20 rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground font-mono focus:border-primary focus:outline-none"
+                      />
+                      {timeRangeEnd && (
+                        <span className="text-[10px] text-cf-muted font-mono ml-2">({timeRangeEnd}s)</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 5D: Hard Duration Cap Guarantee Badge */}
+            <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🛡️</span>
+                <div>
+                  <span className="text-xs font-semibold text-primary block">Strict Hard Duration Guarantee</span>
+                  <span className="text-[10px] text-cf-muted block">
+                    Clips will never exceed {maxLength}s. Enforced via Whisper sentence-end &amp; scene-cut boundary snapping.
+                  </span>
+                </div>
+              </div>
+              <span className="text-[10px] bg-primary/20 text-primary px-2.5 py-1 rounded font-mono font-bold">
+                ≤ {maxLength}s
+              </span>
+            </div>
+          </section>
+
           {/* Campaign Briefs & Guidance */}
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold">5. Campaign Brief &amp; Guidance (Optional)</h2>
+              <h2 className="text-sm font-semibold">6. Campaign Brief &amp; Guidance (Optional)</h2>
               <button
                 type="button"
                 onClick={() => setShowBriefForm(!showBriefForm)}

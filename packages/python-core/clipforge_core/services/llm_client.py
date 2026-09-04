@@ -173,20 +173,51 @@ class LLMClient:
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
-            response_format={"type": "json_object"},
         )
 
         # Parse JSON response
         try:
-            # Strip markdown code fences if the model ignores our instruction
+            import re
             cleaned = raw_response.strip()
-            if cleaned.startswith("```"):
-                lines = cleaned.split("\n")
-                # Remove first line (```json) and last line (```)
-                lines = [line for line in lines[1:] if not line.strip().startswith("```")]
-                cleaned = "\n".join(lines)
+
+            # If markdown fences are present anywhere, extract the fenced block
+            if "```" in cleaned:
+                fence_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', cleaned)
+                if fence_match:
+                    cleaned = fence_match.group(1).strip()
+                else:
+                    # Strip leading fence if unclosed
+                    cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned).strip()
+
+            # If preamble thinking text exists before JSON, strip up to first '{'
+            first_brace = cleaned.find("{")
+            if first_brace > 0:
+                cleaned = cleaned[first_brace:]
+
             return json.loads(cleaned)
         except json.JSONDecodeError as e:
+            import re
+            # Fallback 1: attempt regex extraction of outermost {...}
+            brace_match = re.search(r'\{[\s\S]*\}', raw_response)
+            if brace_match:
+                try:
+                    return json.loads(brace_match.group(0))
+                except Exception:
+                    pass
+
+            # Fallback 2: recover complete individual clip objects if array was truncated
+            clip_matches = re.findall(r'\{[^{}]*"start_sec"[^{}]*\}', raw_response)
+            if clip_matches:
+                extracted_clips = []
+                for cm in clip_matches:
+                    try:
+                        extracted_clips.append(json.loads(cm))
+                    except Exception:
+                        continue
+                if extracted_clips:
+                    logger.info(f"Recovered {len(extracted_clips)} clips from partial LLM response")
+                    return {"clips": extracted_clips}
+
             logger.error(f"LLM returned invalid JSON: {raw_response[:500]}")
             raise LLMClientError(
                 message=f"LLM response was not valid JSON: {e}",
@@ -228,8 +259,28 @@ class LLMClient:
                 provider_info = response.headers.get("x-provider")
 
                 if response.status_code == 200:
-                    data = response.json()
-                    content = data["choices"][0]["message"]["content"]
+                    content_type = response.headers.get("content-type", "")
+                    if "text/event-stream" in content_type:
+                        # Gateway returned SSE stream despite stream=False
+                        chunks = []
+                        for line in response.text.split("\n"):
+                            line = line.strip()
+                            if line.startswith("data: ") and line != "data: [DONE]":
+                                try:
+                                    chunk_data = json.loads(line[6:])
+                                    choice = chunk_data.get("choices", [{}])[0]
+                                    delta = choice.get("delta", {})
+                                    if "content" in delta and delta["content"]:
+                                        chunks.append(delta["content"])
+                                    elif "message" in choice and choice["message"].get("content"):
+                                        chunks.append(choice["message"]["content"])
+                                except Exception:
+                                    continue
+                        content = "".join(chunks)
+                    else:
+                        data = response.json()
+                        content = data["choices"][0]["message"]["content"]
+
                     if provider_info:
                         logger.info(f"LLM Success: {model} via {provider_info}")
                     return content

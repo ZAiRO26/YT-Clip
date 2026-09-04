@@ -52,6 +52,10 @@ export interface Project {
   default_effects?: Array<{ id: string; intensity?: number }>;
   default_voice_id?: string;
   default_music_track?: string;
+  time_range_start?: number | null;
+  time_range_end?: number | null;
+  temporal_distribution?: string;
+  content_focus?: string;
   status: string;
   created_at: string;
   jobs: JobStatus[];
@@ -108,6 +112,8 @@ export interface CreateProjectInput {
   custom_prompt?: string | null;
   time_range_start?: number | null;
   time_range_end?: number | null;
+  temporal_distribution?: string;
+  content_focus?: string;
 }
 
 export interface CreateBriefInput {
@@ -129,6 +135,8 @@ export interface ReclipInput {
   custom_prompt?: string | null;
   time_range_start?: number | null;
   time_range_end?: number | null;
+  temporal_distribution?: string;
+  content_focus?: string;
 }
 
 class ApiClient {
@@ -227,6 +235,17 @@ class ApiClient {
     });
   }
 
+  async getClipVoiceoverContext(clipId: string) {
+    return this.request<VoiceoverContext>(`/api/clips/${clipId}/voiceover-context`);
+  }
+
+  async generateVoiceoverScript(clipId: string, style: string) {
+    return this.request<GeneratedVoiceoverScript>(`/api/clips/${clipId}/generate-voiceover-script`, {
+      method: "POST",
+      body: JSON.stringify({ style }),
+    });
+  }
+
   // Settings
   async getSettings() {
     return this.request<LLMSettings>("/api/settings");
@@ -245,6 +264,34 @@ class ApiClient {
       body: JSON.stringify(data),
     });
   }
+}
+
+export interface VoiceoverContext {
+  clip_id: string;
+  title: string;
+  start_sec: number;
+  end_sec: number;
+  duration_sec: number;
+  transcript_snippet: string;
+  segments: Array<{ start: number; end: number; text: string }>;
+  has_qualifying_gap: boolean;
+  gaps: Array<{ start_offset_sec: number; end_offset_sec: number; duration_sec: number }>;
+}
+
+export interface GeneratedVoiceoverScript {
+  style: string;
+  script: string;
+  word_count: number;
+  min_words: number;
+  max_words: number;
+  estimated_duration_sec: number;
+  start_offset_sec: number;
+  has_qualifying_gap: boolean;
+  gaps: Array<{ start_offset_sec: number; end_offset_sec: number; duration_sec: number }>;
+  has_unverified_claim: boolean;
+  flagged_words: string[];
+  warning: string | null;
+  source_transcript: string;
 }
 
 export const api = new ApiClient(API_BASE);

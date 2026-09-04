@@ -13,10 +13,12 @@ Note: Auth is simplified for v1 (single-user). Full Supabase Auth
 integration will be added in Phase 4 with the frontend.
 """
 
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from clipforge_core.config import settings
 from clipforge_core.database import get_async_session
@@ -171,6 +173,10 @@ async def create_project(
         default_effects=data.default_effects,
         default_voice_id=data.default_voice_id,
         default_music_track=data.default_music_track,
+        time_range_start=data.time_range_start,
+        time_range_end=data.time_range_end,
+        temporal_distribution=data.temporal_distribution,
+        content_focus=data.content_focus,
         status="queued",
     )
     session.add(project)
@@ -695,6 +701,14 @@ async def reclip_project(
         project.aspect_ratio = data.aspect_ratio
     if data.caption_style:
         project.caption_style = data.caption_style
+    if data.temporal_distribution:
+        project.temporal_distribution = data.temporal_distribution
+    if data.content_focus:
+        project.content_focus = data.content_focus
+    if data.time_range_start is not None:
+        project.time_range_start = data.time_range_start
+    if data.time_range_end is not None:
+        project.time_range_end = data.time_range_end
     await session.commit()
 
     # Dispatch the reclip task
@@ -708,6 +722,8 @@ async def reclip_project(
         custom_prompt=data.custom_prompt,
         time_range_start=data.time_range_start,
         time_range_end=data.time_range_end,
+        temporal_distribution=data.temporal_distribution,
+        content_focus=data.content_focus,
     )
 
     return {
@@ -950,10 +966,12 @@ async def rerender_single_clip(
     # Optional Voiceover synthesis (Local Kokoro TTS)
     vo_path = None
     vo_asset_id = None
+    actual_vo_duration = 0.0
     if voiceover_text and voiceover_text.strip():
         vo_asset_id = str(uuid.uuid4())
         vo_path = clips_dir / f"vo_{clip.id}.wav"
-        synthesize_voiceover(voiceover_text, voice_id=voice_id, output_path=vo_path)
+        synth_res = synthesize_voiceover(voiceover_text, voice_id=voice_id, output_path=vo_path)
+        actual_vo_duration = float(synth_res.get("duration_sec", 0.0))
 
     # Optional Music bed
     bg_music_path = None
@@ -985,15 +1003,33 @@ async def rerender_single_clip(
     # If VO or Music present, mix into the rendered video and remux atomically
     if vo_path or bg_music_path:
         mixed_audio = clips_dir / f"mixed_{clip.id}.aac"
-        vo_delay = float(payload.get("voiceover_delay_sec", 0.5))
+        clip_duration = end_sec - start_sec
+        buffer_sec = float(payload.get("outro_buffer_sec", 0.5))
+        vo_style = payload.get("voiceover_style")
+
+        # Two-pass placement computation using real synthesized duration
+        if vo_style == "outro_cta":
+            # Exact tail-anchoring using actual synthesized duration
+            vo_offset = max(0.5, clip_duration - actual_vo_duration - buffer_sec)
+        elif "voiceover_start_offset_sec" in payload and payload["voiceover_start_offset_sec"] is not None:
+            requested_offset = float(payload["voiceover_start_offset_sec"])
+            # Overflow guard: if requested offset + audio overflows clip duration, clamp back
+            if vo_path and (requested_offset + actual_vo_duration > clip_duration):
+                vo_offset = max(0.5, clip_duration - actual_vo_duration - buffer_sec)
+            else:
+                vo_offset = requested_offset
+        else:
+            vo_offset = float(payload.get("voiceover_delay_sec", 0.5))
+
         mix_audio_tracks(
             source_video_path=out_video_path,
             output_audio_path=mixed_audio,
             start_sec=0.0,
-            end_sec=end_sec - start_sec,
+            end_sec=clip_duration,
             voiceover_path=vo_path,
             music_path=bg_music_path,
-            voiceover_delay_sec=vo_delay,
+            voiceover_delay_sec=vo_offset,
+            voiceover_start_offset_sec=vo_offset,
         )
         # Remux mixed audio into out_video_path atomically
         temp_muxed = clips_dir / f"clip_{clip.id}_muxed_temp.mp4"
@@ -1146,6 +1182,160 @@ async def browse_local_folder(title: str = "Select Destination Folder", initial_
     import asyncio
     result = await asyncio.to_thread(pick_folder_sync, title=title, initial_dir=initial_dir)
     return result
+
+
+def _resolve_project_dir(proj_id: str) -> Path:
+    candidates = [
+        Path(settings.MEDIA_DIR) / proj_id,
+        Path("media") / proj_id,
+        Path(__file__).resolve().parents[4] / "media" / proj_id,
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    return candidates[0]
+
+
+@router.get("/clips/{clip_id}/voiceover-context")
+async def get_clip_voiceover_context(
+    clip_id: str,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """
+    Get transcript context and silence gap intelligence for a clip,
+    enabling UI to display source dialogue and conditionally enable the Explainer style.
+    """
+    result = await session.execute(
+        select(Clip).where(Clip.id == uuid.UUID(clip_id)).options(selectinload(Clip.project))
+    )
+    clip = result.scalar_one_or_none()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    project = clip.project
+    project_dir = _resolve_project_dir(str(project.id))
+    transcript_file = project_dir / "transcript.json"
+    analysis_file = project_dir / "analysis.json"
+
+    all_segments = []
+    if transcript_file.exists():
+        try:
+            t_data = json.loads(transcript_file.read_text(encoding="utf-8"))
+            all_segments = t_data.get("segments", [])
+        except Exception:
+            pass
+    if not all_segments and analysis_file.exists():
+        try:
+            a_data = json.loads(analysis_file.read_text(encoding="utf-8"))
+            all_segments = a_data.get("transcript", {}).get("segments", [])
+        except Exception:
+            pass
+
+    # Filter segments overlapping with clip
+    clip_segments = []
+    text_pieces = []
+    for s in all_segments:
+        s_start = float(s.get("start", 0.0))
+        s_end = float(s.get("end", 0.0))
+        if s_end > clip.start_sec and s_start < clip.end_sec:
+            clip_segments.append(s)
+            txt = s.get("text", "").strip()
+            if txt:
+                text_pieces.append(txt)
+
+    transcript_snippet = " ".join(text_pieces)
+
+    from clipforge_core.services.gap_detector import find_silence_gaps
+    gaps = find_silence_gaps(
+        transcript_segments=all_segments,
+        clip_start_sec=clip.start_sec,
+        clip_end_sec=clip.end_sec,
+        min_gap_sec=3.0,
+    )
+
+    duration = round(clip.end_sec - clip.start_sec, 2)
+    resolved_title = (clip.render_manifest or {}).get("title") or (clip.project.title if clip.project else "Untitled Clip")
+
+    return {
+        "clip_id": str(clip.id),
+        "title": resolved_title,
+        "start_sec": clip.start_sec,
+        "end_sec": clip.end_sec,
+        "duration_sec": duration,
+        "transcript_snippet": transcript_snippet,
+        "segments": clip_segments,
+        "has_qualifying_gap": len(gaps) > 0,
+        "gaps": gaps,
+    }
+
+
+@router.post("/clips/{clip_id}/generate-voiceover-script")
+async def generate_clip_voiceover_script(
+    clip_id: str,
+    payload: Dict[str, Any],
+    session: AsyncSession = Depends(get_async_session),
+):
+    """
+    Generate an AI voiceover script matching a style, enforcing Kokoro word counts,
+    grounding against the transcript snippet, and computing start offset.
+    """
+    style = payload.get("style", "hook_intro")
+    result = await session.execute(
+        select(Clip).where(Clip.id == uuid.UUID(clip_id)).options(selectinload(Clip.project))
+    )
+    clip = result.scalar_one_or_none()
+    if not clip:
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    project = clip.project
+    project_dir = _resolve_project_dir(str(project.id))
+    transcript_file = project_dir / "transcript.json"
+    analysis_file = project_dir / "analysis.json"
+
+    all_segments = []
+    if transcript_file.exists():
+        try:
+            t_data = json.loads(transcript_file.read_text(encoding="utf-8"))
+            all_segments = t_data.get("segments", [])
+        except Exception:
+            pass
+    if not all_segments and analysis_file.exists():
+        try:
+            a_data = json.loads(analysis_file.read_text(encoding="utf-8"))
+            all_segments = a_data.get("transcript", {}).get("segments", [])
+        except Exception:
+            pass
+
+    # Extract dialogue text in clip range
+    text_pieces = []
+    for s in all_segments:
+        s_start = float(s.get("start", 0.0))
+        s_end = float(s.get("end", 0.0))
+        if s_end > clip.start_sec and s_start < clip.end_sec:
+            txt = s.get("text", "").strip()
+            if txt:
+                text_pieces.append(txt)
+    transcript_snippet = " ".join(text_pieces)
+
+    duration = clip.end_sec - clip.start_sec
+    clip_title = (clip.render_manifest or {}).get("title") or (clip.project.title if clip.project else "Highlight")
+
+    preview_audio_file = project_dir / "clips" / f"vo_preview_{clip.id}.wav"
+    from clipforge_core.services.script_generator import generate_voiceover_script
+    script_data = await generate_voiceover_script(
+        clip_title=clip_title,
+        transcript_snippet=transcript_snippet,
+        style=style,
+        clip_duration_sec=duration,
+        clip_start_sec=clip.start_sec,
+        transcript_segments=all_segments,
+        output_audio_path=preview_audio_file,
+    )
+    if preview_audio_file.exists():
+        script_data["audio_preview_url"] = f"media/{project.id}/clips/{preview_audio_file.name}"
+
+    return script_data
+
 
 
 

@@ -260,6 +260,8 @@ export default function ProjectDetailPage() {
     custom_prompt: "",
     time_range_start: null,
     time_range_end: null,
+    temporal_distribution: "even_spread",
+    content_focus: "balanced",
   });
 
   const fetchData = useCallback(async () => {
@@ -631,9 +633,63 @@ export default function ProjectDetailPage() {
                 </div>
               </div>
 
+              {/* Content Focus Mode */}
+              <div>
+                <label className="text-xs text-cf-muted block mb-1.5">Content Focus Mode</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: "balanced", label: "🎭 Balanced", desc: "50/50 mix" },
+                    { id: "contestant_primary", label: "🎤 Contestants", desc: "≥70% acts" },
+                    { id: "judges_primary", label: "⚖️ Judges", desc: "≥70% banter" },
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setReclipSettings({ ...reclipSettings, content_focus: f.id })}
+                      className={`p-2 rounded-lg border text-left transition-all ${
+                        (reclipSettings.content_focus || "balanced") === f.id
+                          ? "border-primary bg-primary/10 ring-1 ring-primary/50 text-primary"
+                          : "border-border bg-background text-cf-muted hover:border-border/80"
+                      }`}
+                    >
+                      <span className="text-xs font-semibold block">{f.label}</span>
+                      <span className="text-[10px] text-cf-muted block">{f.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Timeline Distribution Strategy */}
+              <div>
+                <label className="text-xs text-cf-muted block mb-1.5">Timeline Distribution Strategy</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: "even_spread", label: "🌐 Temporal Bins", desc: "Full spread" },
+                    { id: "focus_window", label: "🎯 Time Window", desc: "Specific range" },
+                    { id: "top_moments", label: "⚡ Top Moments", desc: "Pure rank" },
+                  ].map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setReclipSettings({ ...reclipSettings, temporal_distribution: s.id })}
+                      className={`p-2 rounded-lg border text-left transition-all ${
+                        (reclipSettings.temporal_distribution || "even_spread") === s.id
+                          ? "border-primary bg-primary/10 ring-1 ring-primary/50 text-primary"
+                          : "border-border bg-background text-cf-muted hover:border-border/80"
+                      }`}
+                    >
+                      <span className="text-xs font-semibold block">{s.label}</span>
+                      <span className="text-[10px] text-cf-muted block">{s.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Optional Time Range */}
               <div>
-                <label className="text-xs text-cf-muted block mb-1.5">Focus on specific time range (optional)</label>
+                <label className="text-xs text-cf-muted block mb-1.5">
+                  Focus Time Window (seconds) {reclipSettings.temporal_distribution === "focus_window" && <span className="text-primary font-bold">*Active</span>}
+                </label>
                 <div className="flex gap-3 items-center">
                   <input
                     type="number"
@@ -654,6 +710,19 @@ export default function ProjectDetailPage() {
                   />
                   <span className="text-cf-muted text-xs">Leave empty for full video</span>
                 </div>
+              </div>
+
+              {/* Hard Duration Cap Guarantee Badge */}
+              <div className="rounded-lg bg-primary/5 border border-primary/20 p-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">🛡️</span>
+                  <span className="text-xs text-cf-muted">
+                    Boundary-clamped: clips strictly ≤ <strong className="text-foreground">{reclipSettings.max_length_sec}s</strong>
+                  </span>
+                </div>
+                <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded font-mono font-bold">
+                  Enforced
+                </span>
               </div>
 
               {/* Submit */}

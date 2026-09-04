@@ -21,14 +21,24 @@ def mix_audio_tracks(
     voiceover_delay_sec: float = 0.5,
     music_volume_db: float = -8.0,
     source_duck_db: float = -12.0,
+    voiceover_start_offset_sec: float | None = None,
 ) -> Dict[str, Any]:
     """
     Mixes audio streams into a mastered AAC track with sidechain ducking.
+    Supports dynamic voiceover placement via voiceover_start_offset_sec.
     """
     src_vid = Path(source_video_path)
     out_audio = Path(output_audio_path)
     out_audio.parent.mkdir(parents=True, exist_ok=True)
     duration = end_sec - start_sec
+
+    # Dynamic Voiceover placement offset (backward compatible with voiceover_delay_sec)
+    effective_offset = (
+        voiceover_start_offset_sec
+        if voiceover_start_offset_sec is not None
+        else voiceover_delay_sec
+    )
+    delay_ms = int(effective_offset * 1000)
 
     inputs = [
         "-ss", str(start_sec),
@@ -54,24 +64,28 @@ def mix_audio_tracks(
     # Build filter graph
     if vo_idx is not None and music_idx is not None:
         # 3 streams: Source, VO, Music
-        # Delay VO if requested and pad with silence so ducking releases cleanly after narration finishes
-        delay_ms = int(voiceover_delay_sec * 1000)
-        filter_complex_parts.append(f"[{vo_idx}:a]adelay={delay_ms}|{delay_ms},volume=1.0,apad[vo_delayed];")
-        # Duck source and music under VO
+        # Format VO to stereo 44.1kHz, delay, pad, and split into sidechain triggers and mix stream
+        filter_complex_parts.append(
+            f"[{vo_idx}:a]adelay={delay_ms}|{delay_ms},aformat=sample_rates=44100:channel_layouts=stereo,"
+            f"volume=1.8,apad,asplit=3[vo_sc1][vo_sc2][vo_mix];"
+        )
         filter_complex_parts.append(f"[{music_idx}:a]volume={music_volume_db}dB[bg_low];")
         filter_complex_parts.append(
-            "[0:a][vo_delayed]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=250[ducked_src];"
-            "[bg_low][vo_delayed]sidechaincompress=threshold=0.03:ratio=8:attack=15:release=300[ducked_bg];"
-            "[ducked_src][vo_delayed][ducked_bg]amix=inputs=3:duration=first:dropout_transition=2,"
+            "[0:a][vo_sc1]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=250[ducked_src];"
+            "[bg_low][vo_sc2]sidechaincompress=threshold=0.03:ratio=8:attack=15:release=300[ducked_bg];"
+            "[ducked_src][vo_mix][ducked_bg]amix=inputs=3:duration=first:dropout_transition=2:normalize=0,"
             "loudnorm=I=-14:LRA=7:TP=-1.5[aout]"
         )
     elif vo_idx is not None:
         # 2 streams: Source and VO
-        delay_ms = int(voiceover_delay_sec * 1000)
-        filter_complex_parts.append(f"[{vo_idx}:a]adelay={delay_ms}|{delay_ms},volume=1.0,apad[vo_delayed];")
+        # Format VO to stereo 44.1kHz, delay, pad, and split into sidechain trigger and mix stream
         filter_complex_parts.append(
-            "[0:a][vo_delayed]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=250[ducked_src];"
-            "[ducked_src][vo_delayed]amix=inputs=2:duration=first:dropout_transition=2,"
+            f"[{vo_idx}:a]adelay={delay_ms}|{delay_ms},aformat=sample_rates=44100:channel_layouts=stereo,"
+            f"volume=1.8,apad,asplit=2[vo_sc][vo_mix];"
+        )
+        filter_complex_parts.append(
+            "[0:a][vo_sc]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=250[ducked_src];"
+            "[ducked_src][vo_mix]amix=inputs=2:duration=first:dropout_transition=2:normalize=0,"
             "loudnorm=I=-14:LRA=7:TP=-1.5[aout]"
         )
     elif music_idx is not None:
