@@ -25,36 +25,7 @@ from clipforge_core.services.render_engine import build_render_manifest, render_
 logger = logging.getLogger(__name__)
 
 
-def _update_job_status(
-    project_id: str,
-    stage: str,
-    status: str,
-    error_message: str | None = None,
-) -> None:
-    """Update job status in DB."""
-    session = get_sync_session()
-    try:
-        job = (
-            session.query(Job)
-            .filter(
-                Job.project_id == uuid.UUID(project_id),
-                Job.stage.in_([stage, "crop", "render", "caption"]),
-            )
-            .first()
-        )
-        if job:
-            job.status = status
-            job.error_message = error_message
-            if status == "running":
-                job.started_at = datetime.now(timezone.utc)
-            if status in ("success", "failed"):
-                job.completed_at = datetime.now(timezone.utc)
-            session.commit()
-    except Exception as e:
-        logger.error(f"Failed to update job status for {stage}: {e}")
-        session.rollback()
-    finally:
-        session.close()
+from clipforge_core.services.progress import update_job_progress
 
 
 def _update_project_status(project_id: str, status: str) -> None:
@@ -84,7 +55,7 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
     Renders all selected clips for a project with manifests and thumbnails.
     """
     logger.info(f"[Render Worker] Starting render pipeline for project {project_id}")
-    _update_job_status(project_id, "render", "running")
+    update_job_progress(project_id, stage="render", status="running", percent=0.0, detail="Initializing render pipeline...")
     _update_project_status(project_id, "encoding")
 
     project_dir = Path(settings.MEDIA_DIR) / project_id
@@ -94,13 +65,13 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
 
     if not source_video.exists():
         error_msg = f"Source video not found: {source_video}"
-        _update_job_status(project_id, "render", "failed", error_message=error_msg)
+        update_job_progress(project_id, stage="render", status="failed", error_message=error_msg, force_write=True)
         _update_project_status(project_id, "failed")
         raise FileNotFoundError(error_msg)
 
     if not selections_file.exists():
         error_msg = f"Selections file not found: {selections_file}"
-        _update_job_status(project_id, "render", "failed", error_message=error_msg)
+        update_job_progress(project_id, stage="render", status="failed", error_message=error_msg, force_write=True)
         _update_project_status(project_id, "failed")
         raise FileNotFoundError(error_msg)
 
@@ -167,16 +138,24 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
     rendered_results: List[Dict[str, Any]] = []
 
     try:
+        total_clips = len(candidate_clips)
         for idx, cand in enumerate(candidate_clips):
+            base_percent = (idx / total_clips) * 100.0
+
             start_s = cand.get("start_sec", 0.0)
             end_s = cand.get("end_sec", start_s + 30.0)
 
-            # Match to specific DB clip by time range or sequential order
+            # Match to specific DB clip by ID, time range, or sequential order
             matched_clip = None
-            for c in db_clips:
-                if abs(float(c.start_sec) - start_s) < 0.2 and abs(float(c.end_sec) - end_s) < 0.2:
-                    matched_clip = c
-                    break
+            if "clip_id" in cand:
+                clip_id = cand["clip_id"]
+                matched_clip = next((c for c in db_clips if str(c.id) == clip_id), None)
+            
+            if not matched_clip:
+                for c in db_clips:
+                    if abs(float(c.start_sec) - start_s) < 0.2 and abs(float(c.end_sec) - end_s) < 0.2:
+                        matched_clip = c
+                        break
 
             if matched_clip:
                 clip_id = str(matched_clip.id)
@@ -203,6 +182,16 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
             out_video_path = clips_output_dir / f"clip_{clip_num}.mp4"
             out_thumb_path = clips_output_dir / f"clip_{clip_num}_thumb.jpg"
 
+            # Define progress callback
+            def clip_progress(p: float):
+                overall_percent = base_percent + (p / total_clips)
+                update_job_progress(
+                    project_id=project_id,
+                    stage="render",
+                    percent=overall_percent,
+                    detail=f"Rendering clip {idx+1}/{total_clips} ({p:.0f}%)"
+                )
+
             # Execute rendering
             render_res = render_clip(
                 source_path=source_video,
@@ -214,6 +203,7 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                 caption_style=caption_style,
                 transcript_segments=transcript_segments,
                 output_thumbnail_path=out_thumb_path,
+                progress_callback=clip_progress,
             )
 
             # Apply project-wide default motion effects if selected
@@ -335,7 +325,7 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
         finally:
             audit_session.close()
 
-        _update_job_status(project_id, "render", "success")
+        update_job_progress(project_id, stage="render", status="success", percent=100.0, detail="Rendering complete.", force_write=True)
         _update_project_status(project_id, "done")
         logger.info(f"[Render Worker] Completed rendering {len(rendered_results)} clips for project {project_id}")
 
@@ -349,9 +339,9 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
         error_msg = f"Render pipeline error: {e}"
         logger.error(f"[Render Worker] {error_msg}")
         if self.request.retries < self.max_retries:
-            _update_job_status(project_id, "render", "retrying", error_message=error_msg)
+            update_job_progress(project_id, stage="render", status="retrying", error_message=error_msg, force_write=True)
             raise self.retry(exc=e)
         else:
-            _update_job_status(project_id, "render", "failed", error_message=error_msg)
+            update_job_progress(project_id, stage="render", status="failed", error_message=error_msg, force_write=True)
             _update_project_status(project_id, "failed")
             raise

@@ -75,8 +75,13 @@
 15. **Phase 7 (Motion Effects Engine) — 100% COMPLETE:**
     - **Motion Effects Engine (Tasks 7.1, 7.2, 7.3):** Built `effects_engine.py` with 8 distinct effect filter chains (`zoom`, `camera_shake`, `film_grain`, `vignette`, `rgb_split`, `vhs_noise`, `blur_background`, `floating_cta`).
     - **Safe-Zone Avoidance & Dynamic Overlays (Tasks 7.4 & 7.5):** Implemented safe-zone vertical placement for floating callouts and logos avoiding mobile UI overlays.
+    - **Real-Time Progress UI:** End-to-end implementation of granular progress reporting via durable database state (Job `progress_percent` and `progress_detail`), worker-level instrumentation (yt-dlp, faster-whisper, llm, async ffmpeg), and dynamic frontend Stage Pills.
     - **Deterministic Persistence (Task 7.7):** Effects, parameters, and time ranges are fully stored in the `render_manifest` for exact reproduction.
     - **Unit Tests:** Created tests for effect catalog, filter string builders, and live video FFmpeg filter rendering (37/37 tests passing).
+
+### Next Immediate Steps (To Be Picked Up Next Session)
+- **Batch Processing / Queue Management**: Continue building out dashboard features for bulk ingestion.
+- **Audio Equalization**: Test the mastering parameters on generated clips.
 
 16. **Phase 8 (Clip Editor and Brand Kits) — 100% COMPLETE:**
     - **Single Clip Editor Studio (Task 8.1 & 8.4):** Built interactive Clip Editor page at `/project/[id]/clip/[clipId]` with side-by-side Before/After comparison player, in/out trimming controls, caption style selector, voiceover script editor, and motion effect toggles.
@@ -254,6 +259,11 @@
      - **Rights Basis Policy:** [x] Formally documented India's Got Latent test content as `other_unconfirmed` / `high_claim_risk` for internal pipeline testing only.
      - **Frontend Studio UI:** [x] Added Section 5 (Timeline Window & Selection Strategy) to `apps/web/src/app/new/page.tsx` with MM:SS inputs, Content Focus mode tiles, Temporal Distribution strategy tiles, and a Strict Hard Duration Guarantee badge. Added matching controls to the Reclip Modal in `apps/web/src/app/project/[id]/page.tsx`.
      - **Full Test Verification:** [x] Ran complete workspace test suite: **82 passed in 163.96s** (100% pass rate). Next.js TypeScript check clean with 0 errors.
+
+ 39. **Session 20 (Reclip Deduplication & Pipeline Progress Resilience):**
+     - **Reclip Duplication Bugfix (`select.py` & `render.py`):** [x] Fixed an architecture flaw where clicking "Generate More Clips" with an unchanged LLM prompt resulted in identical time-bounds being repeatedly inserted as new database rows, causing the render worker to mismatch them against old rows and leaving new rows permanently hanging. `select.py` now cross-references `time_bounds` against existing DB clips before insertion, generating and attaching explicit `clip_id`s in `selections.json`. `render.py` now maps renders directly by `clip_id` instead of loose time boundaries.
+     - **Pipeline Progress Broadcasting (`progress.py`):** [x] Fixed a bug where combined pipeline workers (like `render` handling both cropping and captioning) were only updating the first matched job record via `.first()`, leaving secondary stage badges (like Caption) permanently stuck in `pending` on fresh projects. Refactored the progress tracker to execute a bounded `.all()` loop, guaranteeing all aliased pipeline UI badges synchronously reflect underlying worker progress.
+
 
 
 

@@ -140,35 +140,7 @@ Return a JSON object:
     return prompt
 
 
-def _update_job_status(
-    project_id: str,
-    status: str,
-    error_message: str | None = None,
-) -> None:
-    """Update select job status in DB."""
-    session = get_sync_session()
-    try:
-        job = (
-            session.query(Job)
-            .filter(
-                Job.project_id == uuid.UUID(project_id),
-                Job.stage.in_(["select", "llm"]),
-            )
-            .first()
-        )
-        if job:
-            job.status = status
-            job.error_message = error_message
-            if status == "running":
-                job.started_at = datetime.now(timezone.utc)
-            if status in ("success", "failed"):
-                job.completed_at = datetime.now(timezone.utc)
-            session.commit()
-    except Exception as e:
-        logger.error(f"Failed to update job status: {e}")
-        session.rollback()
-    finally:
-        session.close()
+from clipforge_core.services.progress import update_job_progress
 
 
 def _update_project_status(project_id: str, status: str) -> None:
@@ -209,7 +181,7 @@ def select_clips(
     Candidate selection task running on the 'llm' queue.
     """
     logger.info(f"[LLM Select] Starting candidate selection for project {project_id}")
-    _update_job_status(project_id, "running")
+    update_job_progress(project_id, stage="select", status="running", percent=10.0, detail="Parsing transcript & brief...")
     _update_project_status(project_id, "selecting")
 
     project_dir = Path(settings.MEDIA_DIR) / project_id
@@ -218,7 +190,7 @@ def select_clips(
 
     if not transcript_path.exists() and not analysis_path.exists():
         error_msg = f"Transcript missing for project {project_id}"
-        _update_job_status(project_id, "failed", error_message=error_msg)
+        update_job_progress(project_id, stage="select", status="failed", error_message=error_msg, force_write=True)
         _update_project_status(project_id, "failed")
         raise FileNotFoundError(error_msg)
 
@@ -292,6 +264,8 @@ def select_clips(
         content_focus=content_focus,
     )
 
+    update_job_progress(project_id, stage="select", percent=30.0, detail="Awaiting LLM extraction (this takes a moment)...")
+
     try:
         # Run async LLM completion in event loop
         loop = asyncio.new_event_loop()
@@ -306,6 +280,8 @@ def select_clips(
             )
         finally:
             loop.close()
+
+        update_job_progress(project_id, stage="select", percent=80.0, detail="Ranking candidates & deduplicating...")
 
         raw_clips: List[Dict[str, Any]] = (
             response_json.get("clips", []) if isinstance(response_json, dict) else response_json
@@ -402,19 +378,32 @@ def select_clips(
         db_session = get_sync_session()
         try:
             pid = uuid.UUID(project_id)
+            existing_clips = db_session.query(Clip).filter(Clip.project_id == pid).all()
+            
             for c in final_clips:
-                clip_record = Clip(
-                    id=uuid.uuid4(),
-                    project_id=pid,
-                    start_sec=c["start_sec"],
-                    end_sec=c["end_sec"],
-                    score=c.get("editorial_potential", c.get("virality_score", 0.75)),
-                    transformation_score=c["transformation_score"],
-                    transformation_breakdown=c["transformation_breakdown"],
-                    reasoning=f"[{c['hook_type']}] {c['title']} — {c['reasoning']}",
-                    review_status="pending",
-                )
-                db_session.add(clip_record)
+                matched = False
+                for ex in existing_clips:
+                    if abs(float(ex.start_sec) - c["start_sec"]) < 0.2 and abs(float(ex.end_sec) - c["end_sec"]) < 0.2:
+                        matched = True
+                        c["clip_id"] = str(ex.id)
+                        break
+                        
+                if not matched:
+                    clip_record = Clip(
+                        id=uuid.uuid4(),
+                        project_id=pid,
+                        start_sec=c["start_sec"],
+                        end_sec=c["end_sec"],
+                        score=c.get("editorial_potential", c.get("virality_score", 0.75)),
+                        transformation_score=c["transformation_score"],
+                        transformation_breakdown=c["transformation_breakdown"],
+                        reasoning=f"[{c['hook_type']}] {c['title']} — {c['reasoning']}",
+                        review_status="pending",
+                    )
+                    db_session.add(clip_record)
+                    db_session.flush() # flush to get the id if needed, though we already generated it
+                    c["clip_id"] = str(clip_record.id)
+                    existing_clips.append(clip_record) # add to existing so we don't duplicate within the same batch
 
             # Record audit event
             audit = ProjectAuditEvent(
@@ -436,14 +425,14 @@ def select_clips(
         finally:
             db_session.close()
 
-        _update_job_status(project_id, "success")
+        update_job_progress(project_id, stage="select", status="success", percent=100.0, detail="Selection complete.", force_write=True)
         logger.info(f"[LLM Select] Selected {len(final_clips)} clips for project {project_id}")
         return selections_payload
 
     except LLMClientError as e:
         error_msg = f"LLM Gateway error: {e.message}"
         logger.error(f"[LLM Select] {error_msg}")
-        _update_job_status(project_id, "failed", error_message=error_msg)
+        update_job_progress(project_id, stage="select", status="failed", error_message=error_msg, force_write=True)
         _update_project_status(project_id, "failed")
         raise
 
@@ -451,9 +440,9 @@ def select_clips(
         error_msg = f"Candidate selection error: {e}"
         logger.error(f"[LLM Select] {error_msg}")
         if self.request.retries < self.max_retries:
-            _update_job_status(project_id, "retrying", error_message=error_msg)
+            update_job_progress(project_id, stage="select", status="retrying", error_message=error_msg, force_write=True)
             raise self.retry(exc=e)
         else:
-            _update_job_status(project_id, "failed", error_message=error_msg)
+            update_job_progress(project_id, stage="select", status="failed", error_message=error_msg, force_write=True)
             _update_project_status(project_id, "failed")
             raise

@@ -75,6 +75,12 @@
   - **Real-Time Visual Badging:** Selected video files display size metadata (e.g. `Selected Video File: my-video.mp4 (1.83 GB)`), while selected folders display total video count detected inside the directory.
   - **Preserved Existing Single-File Workflow:** Retained complete backward compatibility with manual path entry and single-source video clipping pipeline.
   - **Verification:** Production Next.js build compiled with 0 errors across all routes; live browser smoke test confirmed clean UI and instant native file/folder picker invocation.
+
+### Recent Achievements
+- **Real-Time Progress UI**: Replaced static UI stage spinners with dynamic, granular progress bars and percentage meters for the 5 pipeline stages (Download, Transcribe, Select, Crop, Caption). Hooked into yt-dlp `progress_hooks`, faster-whisper timestamps, async FFmpeg `-progress` parsing, and LLM polling checkpoints, backed by throttled durable storage on the `Job` model to survive worker restarts.
+- **Project Duplication**: Added `cloneProject` endpoint and UI button to instantly duplicate projects with all associated media and metadata, allowing safe experimentation with different clipping parameters.
+- **Stage Pill Stability**: Fixed bug in orchestrator where `dispatch_reclip` left downstream stage badges hanging in an invalid 'success' state by explicitly resetting statuses to 'pending' before dispatching.
+
 - **Session 15 ("Generate More Clips" / Reclip Schema Bugfix & Latent E05 20-Clip Generation):** ✅ 100% Complete
   - **Diagnosed "Failed to fetch" (500 Internal Server Error):** When the user clicked "Generate 20 More Clips", the frontend sent `min_length_sec`, `max_length_sec`, `aspect_ratio`, and `caption_style`. In `clipforge_core.schemas`, `ReclipRequest` was missing these fields, causing an `AttributeError` on `data.min_length_sec`.
   - **Schema Synchronization:** Added `min_length_sec`, `max_length_sec`, `aspect_ratio`, and `caption_style` to `ReclipRequest` in `packages/python-core/clipforge_core/schemas/__init__.py`.
@@ -114,6 +120,10 @@
   - **Sanitized Prompts & Fallback Templates:** Eliminated internal project/episode metadata leaks (e.g. `"latent e5"`). Replaced fallback templates with natural viewer-facing copy; tested 3 consecutive Hook Intro generations: zero leaked codes, all grounded in dialogue. Added **permanent 7-test regression suite** (`TestScriptNeverLeaksProjectTitle`) covering all 4 fallback templates, parametrized `enforce_word_count` across all styles, and source-code drift detection — guaranteeing any future prompt/template change that reintroduces metadata leaks is caught automatically in CI.
   - **Live Browser End-to-End Verification (`browser_subagent`):** Captured live UI evidence across all 4 styles: `live_hook_intro_success`, `live_outro_cta_success`, `final_clip_rendered` (Hype Reaction with video preview and yellow karaoke highlights), and `live_explainer_success`. Full WebP browser recordings archived.
   - **Full Test Suite:** **100/100** unit tests passing (326.23s). Next.js production build passing with zero errors. Fixed `NameError: name 'Path' is not defined` caused by missing top-level `from pathlib import Path` import in `script_generator.py` (the `output_audio_path` type annotation used `Path` at module scope but it was only imported locally).
+- **Session 20 (Reclip Deduplication & Pipeline Progress Resilience):** ✅ 100% Complete
+  - **Reclip Duplication Bugfix (`select.py` & `render.py`):** Fixed an architecture flaw where clicking "Generate More Clips" with an unchanged LLM prompt resulted in identical time-bounds being repeatedly inserted as new database rows, causing the render worker to mismatch them against old rows and leaving new rows permanently hanging. `select.py` now cross-references `time_bounds` against existing DB clips before insertion, generating and attaching explicit `clip_id`s in `selections.json`. `render.py` now maps renders directly by `clip_id` instead of loose time boundaries.
+  - **Pipeline Progress Broadcasting (`progress.py`):** Fixed a bug where combined pipeline workers (like `render` handling both cropping and captioning) were only updating the first matched job record via `.first()`, leaving secondary stage badges (like Caption) permanently stuck in `pending` on fresh projects. Refactored the progress tracker to execute a bounded `.all()` loop, guaranteeing all aliased pipeline UI badges synchronously reflect underlying worker progress.
+  
 - **Overall v2 Upgrade Roadmap:** ✅ Step 1 & Step 2 Fully Implemented, Hardened, and Verified End-to-End. Production Ready.
 
 ## v1 Baseline
