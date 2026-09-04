@@ -75,6 +75,7 @@ export interface ProjectListItem {
   status: string;
   created_at: string;
   preview_url: string | null;
+  error_message?: string | null;
 }
 
 export interface Clip {

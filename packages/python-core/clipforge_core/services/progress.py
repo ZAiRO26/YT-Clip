@@ -67,11 +67,11 @@ def update_job_progress(
                     job.completed_at = datetime.now(timezone.utc)
             
             if percent is not None:
-                job.progress_percent = percent
+                job.progress_percent = float(percent)
             if detail is not None:
-                job.progress_detail = detail
+                job.progress_detail = str(detail)
             if error_message is not None:
-                job.error_message = error_message
+                job.error_message = str(error_message)
                 
             job.updated_at = datetime.now(timezone.utc)
             session.commit()

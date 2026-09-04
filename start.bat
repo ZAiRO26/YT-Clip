@@ -11,7 +11,7 @@ cd /d "%~dp0"
 
 :: 0. Clean up stale/lingering processes from previous sessions
 echo [1/6] Cleaning up lingering processes on Port 8000, 3000, and old Celery workers...
-powershell -NoProfile -Command "8000, 3000 | ForEach-Object { $p = (Get-NetTCPConnection -LocalPort $_ -State Listen -ErrorAction SilentlyContinue).OwningProcess; if ($p) { Stop-Process -Id $p -Force -ErrorAction SilentlyContinue } }; Get-Process -Name celery -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"
+powershell -NoProfile -Command "8000, 3000 | ForEach-Object { $p = (Get-NetTCPConnection -LocalPort $_ -State Listen -ErrorAction SilentlyContinue).OwningProcess; if ($p) { Stop-Process -Id $p -Force -ErrorAction SilentlyContinue } }; Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*celery*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
 
 :: 1. Check & Start Docker Infrastructure
 echo [2/6] Starting Docker Infrastructure (Postgres 16, Redis 7, MinIO S3)...
@@ -41,15 +41,17 @@ if not exist "models\kokoro\kokoro-v0_19.onnx" (
     echo Kokoro TTS model assets verified.
 )
 
-:: 4. Start FastAPI Backend & Celery Worker
+:: 4. Start FastAPI Backend & Celery Workers (Split IO & Compute for zero queue stalling)
 echo [5/6] Launching Backend Services...
-start "ClipForge AI — API (Port 8000)" cmd /k "set PYTHONPATH=apps/api;packages/python-core && uv run uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --port 8000 --reload --reload-dir apps/api --reload-dir packages/python-core"
+start "ClipForge AI — API (Port 8000)" cmd /k "cd /d \"%~dp0\" && set PYTHONPATH=apps/api;packages/python-core && uv run uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --port 8000 --reload --reload-dir apps/api --reload-dir packages/python-core"
 
-start "ClipForge AI — Celery Worker (7 Queues)" cmd /k "set PYTHONPATH=apps/worker;packages/python-core && uv run celery -A clipforge_core.celery_app worker -Q default,ingest,analysis,llm,editorial,render,qa -P solo --loglevel=info"
+start "ClipForge AI — Ingest & LLM Worker" cmd /k "cd /d \"%~dp0\" && set PYTHONPATH=apps/worker;packages/python-core && uv run celery -A clipforge_core.celery_app worker -n ingest_worker@%%COMPUTERNAME%% -Q ingest,llm,editorial,qa,default -P solo --loglevel=info"
+
+start "ClipForge AI — Compute & Render Worker" cmd /k "cd /d \"%~dp0\" && set PYTHONPATH=apps/worker;packages/python-core && uv run celery -A clipforge_core.celery_app worker -n compute_worker@%%COMPUTERNAME%% -Q analysis,render -P solo --loglevel=info"
 
 :: 5. Start Next.js Frontend Web Studio
 echo [6/6] Launching Next.js Web Studio (Port 3000)...
-start "ClipForge AI — Web Studio (Port 3000)" cmd /k "pnpm --filter @clipforge/web dev"
+start "ClipForge AI — Web Studio (Port 3000)" cmd /k "cd /d \"%~dp0\" && pnpm --filter @clipforge/web dev"
 
 echo.
 echo ===================================================

@@ -307,7 +307,7 @@ async def list_projects(
 
     result = await session.execute(
         select(Project)
-        .options(selectinload(Project.clips))
+        .options(selectinload(Project.clips), selectinload(Project.jobs))
         .where(Project.owner_id == uuid.UUID(owner_id))
         .order_by(Project.created_at.desc())
     )
@@ -322,6 +322,14 @@ async def list_projects(
                 preview_url = c.thumbnail_url
                 break
 
+        # Extract failed job error message if project failed
+        error_message = None
+        if p.status == "failed" and p.jobs:
+            for j in p.jobs:
+                if j.status == "failed" and j.error_message:
+                    error_message = j.error_message
+                    break
+
         items.append(
             ProjectListItem(
                 id=p.id,
@@ -335,6 +343,7 @@ async def list_projects(
                 status=p.status,
                 created_at=p.created_at,
                 preview_url=preview_url,
+                error_message=error_message,
             )
         )
 

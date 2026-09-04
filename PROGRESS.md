@@ -289,7 +289,29 @@
      - **Newly Created Files (Sessions 21–22):**
         - `stop.bat`
         - `packages/python-core/clipforge_core/migrations/versions/70e87509f319_add_job_progress_columns.py`
+
+ 42. **Session 23 (Queue Bottleneck Diagnosis, Dashboard Auto-Polling & Launcher Celery Hardening):**
+     - **Root Cause Analysis for "QUEUED" Stalling:**
+        1. User's target YouTube video (`https://www.youtube.com/watch?v=c9jMdRBRFDA`) is designated as a **Private Video** on YouTube. `yt-dlp` rejected it with `ERROR: [youtube] c9jMdRBRFDA: Private video`.
+        2. Celery workers were previously halted, leaving tasks queued in Redis `ingest` queue without an active consumer.
+        3. The Next.js dashboard (`/dashboard`) lacked automatic interval polling, displaying static initial `QUEUED` state indefinitely without a page refresh.
+     - **Celery Launcher & Stopper Hardening (`start.bat` & `stop.bat`):**
+        - Updated process cleanup to match `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*celery*' }`, terminating orphan Python Celery workers cleanly on Windows.
+        - Guaranteed working directory persistence (`cd /d "%~dp0"`) across all spawned service windows in `start.bat`.
+     - **Live Auto-Polling Dashboard (`apps/web/src/app/dashboard/page.tsx`):**
+        - Added 3-second periodic polling interval so project status pills (`queued` -> `downloading` -> `transcribing` -> `done` or `failed`) reflect live worker progression automatically.
+     - **Failed Job Error Visibility:**
+        - Added `error_message` to `ProjectListItem` across backend schema, `list_projects` route, and web client.
+        - Displayed exact error messages directly under project titles on dashboard cards when `status === "failed"`.
+     - **Live Verification on Public YouTube Video:**
+        - Verified full 467.11 MiB download of public video `ag5Q2iKQyOo` and live pipeline progression into Whisper AI transcription.
+     - **NumPy Scalar DB Rollback Bug Resolved (`progress.py` & `transcribe.py`):**
+        - Discovered that Whisper's segment progress sent a `numpy.float64` scalar, causing psycopg2 to reject updates with `(psycopg2.errors.InvalidSchemaName) schema "np" does not exist`. Fixed by explicitly casting `float(percent)` and `str(detail)` in `update_job_progress` and in `transcribe.py`.
+     - **Dual Dedicated Celery Workers Architecture (`start.bat`):**
+        - Separated Celery execution into `ingest_worker` (fast I/O for `ingest`, `llm`, `editorial`, `qa`, `default`) and `compute_worker` (heavy processing for `analysis`, `render`). New projects are now downloaded and probed immediately without waiting behind long transcriptions.
+     - **Full Test Suite:** [x] 101/101 Python unit tests passing (100% pass rate in 376.95s); Next.js 16 TypeScript typecheck passing with 0 errors.
+
      - **Immediate Next Steps:**
-        - Production Video Ingestion Testing: Submit fresh YouTube URLs across varied formats to verify end-to-end autonomous clipping.
-        - Batch Processing / Folder Ingestion: Test the folder-level multi-file ingestion workflow with the native folder explorer.
-        - Queue & Performance Monitoring: Monitor Celery task queue concurrency and processing duration under multi-clip workloads.
+         - Production Video Ingestion Testing: Submit fresh public YouTube URLs across varied formats (interviews, podcasts, commentary).
+         - Batch Processing / Folder Ingestion: Test the folder-level multi-file ingestion workflow with the native folder explorer.
+         - Queue & Performance Monitoring: Monitor Celery task queue concurrency and processing duration under multi-clip workloads.

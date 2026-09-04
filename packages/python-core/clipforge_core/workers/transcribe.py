@@ -200,8 +200,8 @@ def transcribe_audio(source_path: str, output_dir: str, project_id: str | None =
                 update_job_progress(
                     project_id=project_id,
                     stage="analysis",
-                    percent=round(overall_pct, 1),
-                    detail=f"Transcribing audio: {round(segment.end, 1)}s / {round(info.duration, 1)}s ({int(whisper_pct)}%)"
+                    percent=float(round(overall_pct, 1)),
+                    detail=f"Transcribing audio: {round(float(segment.end), 1)}s / {round(float(info.duration), 1)}s ({int(whisper_pct)}%)"
                 )
             except Exception:
                 pass

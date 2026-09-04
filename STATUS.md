@@ -144,6 +144,18 @@
   - **Live Browser Smoke Test Verified:** End-to-end verification via `browser_subagent` confirmed successful clip re-render with Kokoro TTS (`af_nicole`), 9:16 vertical crop, karaoke subtitles, and audio ducking (HTTP 200), clean project review pipeline status, and functioning dashboard and new project creation workflows.
   - **Full Test Suite Verification:** **101/101** unit tests passing (100% pass rate in 467.01s). Next.js production build and TypeScript typecheck passing with zero errors.
 
+- **Session 23 (Queue Bottleneck Diagnosis, Dashboard Auto-Polling & Launcher Celery Hardening):** ✅ 100% Complete
+  - **Diagnosed "Stuck in QUEUED" Root Causes:**
+    1. The user's submitted video (`https://www.youtube.com/watch?v=c9jMdRBRFDA`) is explicitly designated as a **Private Video** on YouTube, causing `yt-dlp` to fail with `ERROR: [youtube] c9jMdRBRFDA: Private video`.
+    2. Celery was previously halted, leaving tasks queued in Redis `ingest` queue without an active consumer.
+    3. The Dashboard page (`/dashboard`) had static one-time data fetching without interval polling, causing projects to display `QUEUED` indefinitely until a manual browser refresh.
+  - **Launcher Process Termination Hardened (`start.bat` & `stop.bat`):** Replaced faulty `Get-Process -Name celery` with `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*celery*' }`, ensuring clean worker cleanup on Windows. Added `cd /d "%~dp0"` to all child command windows in `start.bat`.
+  - **Live Dashboard Auto-Polling (`page.tsx`):** Added a 3-second live auto-refresh interval to `apps/web/src/app/dashboard/page.tsx` so all projects dynamically update in real time (`queued` -> `downloading` -> `transcribing` -> `done` or `failed`).
+  - **Failed Project Transparency:** Added `error_message` to `ProjectListItem` schema in `clipforge_core.schemas`, API routes (`list_projects`), and web client (`api.ts`). Failed projects now prominently render the exact error reason directly on their dashboard card.
+  - **NumPy Scalar DB Rollback Bug Resolved (`progress.py` & `transcribe.py`):** Uncovered a latent database rollback error where Whisper's `overall_pct` was computed as a `numpy.float64`, causing psycopg2 to fail with `(psycopg2.errors.InvalidSchemaName) schema "np" does not exist` and silently freezing progress reporting at 5.0%. Explicitly cast `percent` to native Python `float(percent)` and `detail` to `str(detail)` in `update_job_progress`, verified with direct unit test.
+  - **Dual Worker Dedicated Architecture (`start.bat`):** Upgraded launcher to spawn two isolated worker processes (`ingest_worker` for I/O bound downloads and fast LLM queries, and `compute_worker` for Whisper transcription, scene detection, and FFmpeg renders), completely eliminating queue stalling where new video submissions had to wait behind hour-long transcriptions.
+  - **Test Suite Verification:** 101/101 Python unit tests passing; Next.js 16 TypeScript typecheck passing with 0 errors.
+
 - **Overall v2 Upgrade Roadmap:** ✅ Step 1 & Step 2 Fully Implemented, Hardened, and Verified End-to-End. Production Ready.
 
 ## v1 Baseline

@@ -179,6 +179,7 @@ class ProjectListItem(BaseModel):
     status: str
     created_at: datetime
     preview_url: str | None = None
+    error_message: str | None = None
 
     model_config = {"from_attributes": True}
 
