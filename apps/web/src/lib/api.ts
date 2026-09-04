@@ -29,6 +29,8 @@ export interface JobStatus {
   started_at: string | null;
   completed_at: string | null;
   updated_at: string;
+  progress_percent?: number | null;
+  progress_detail?: string | null;
 }
 
 export interface Project {

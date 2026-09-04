@@ -126,6 +126,8 @@ class JobStatus(BaseModel):
     stage: str
     status: str
     error_message: str | None = None
+    progress_percent: float | None = None
+    progress_detail: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
     updated_at: datetime

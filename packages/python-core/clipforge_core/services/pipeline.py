@@ -160,6 +160,24 @@ def dispatch_reclip(
     """
     Re-run select -> render pipeline.
     """
+    # Reset downstream jobs to pending
+    session = get_sync_session()
+    try:
+        jobs = session.query(Job).filter(
+            Job.project_id == uuid.UUID(project_id),
+            Job.stage.in_(["select", "crop", "caption", "render"])
+        ).all()
+        for j in jobs:
+            j.status = "pending"
+            j.progress_percent = None
+            j.progress_detail = None
+        session.commit()
+    except Exception as e:
+        logger.error(f"Failed to reset jobs for reclip: {e}")
+        session.rollback()
+    finally:
+        session.close()
+
     from celery import chain as celery_chain
 
     reclip_chain = celery_chain(

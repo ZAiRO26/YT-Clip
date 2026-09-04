@@ -14,7 +14,7 @@ No faces: center-crop fallback with exponential smoothing.
 import logging
 import math
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -115,6 +115,7 @@ def track_faces(
     smoothing_factor: float = 0.25,
     min_detection_confidence: float = 0.5,
     transcript: Optional[Dict[str, Any]] = None,
+    progress_callback: Optional[Callable[[float, str], None]] = None,
 ) -> Dict[str, Any]:
     """
     Track the active speaker's face across the video timeline.
@@ -212,6 +213,10 @@ def track_faces(
                 total_samples += 1
                 time_sec = round(frame_idx / video_fps, 3)
 
+                if progress_callback and total_frames > 0 and total_samples % 10 == 0:
+                    pct = min(100.0, round((frame_idx / total_frames) * 100.0, 1))
+                    progress_callback(pct, f"Tracking faces & active speaker: {round(time_sec, 1)}s / {round(duration, 1)}s ({int(pct)}%)")
+
                 # Downscale for fast BlazeFace inference
                 small_frame = cv2.resize(frame, (480, 270))
                 rgb_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
@@ -297,6 +302,9 @@ def track_faces(
         f"avg_focal_x={avg_x:.3f}, std_dev={std_dev_x:.3f}, fallback_used={fallback_used}, "
         f"speaker_tracking_activations={speaker_tracking_activations}"
     )
+
+    if progress_callback:
+        progress_callback(100.0, f"Completed face tracking across {total_samples} samples.")
 
     return {
         "video_duration_sec": round(duration, 3),

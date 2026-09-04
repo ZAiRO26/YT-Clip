@@ -26,36 +26,7 @@ from clipforge_core.workers.transcribe import transcribe_audio
 logger = logging.getLogger(__name__)
 
 
-def _update_job_status(
-    project_id: str,
-    stage: str,
-    status: str,
-    error_message: str | None = None,
-) -> None:
-    """Update job status in DB."""
-    session = get_sync_session()
-    try:
-        job = (
-            session.query(Job)
-            .filter(
-                Job.project_id == uuid.UUID(project_id),
-                Job.stage.in_([stage, "transcribe", "analysis"]),
-            )
-            .first()
-        )
-        if job:
-            job.status = status
-            job.error_message = error_message
-            if status == "running":
-                job.started_at = datetime.now(timezone.utc)
-            if status in ("success", "failed"):
-                job.completed_at = datetime.now(timezone.utc)
-            session.commit()
-    except Exception as e:
-        logger.error(f"Failed to update job status for {stage}: {e}")
-        session.rollback()
-    finally:
-        session.close()
+from clipforge_core.services.progress import update_job_progress
 
 
 def _update_project_status(project_id: str, status: str) -> None:
@@ -88,7 +59,7 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
       3. Face/subject tracking
     """
     logger.info(f"[Analysis] Starting unified analysis for project {project_id}")
-    _update_job_status(project_id, "analysis", "running")
+    update_job_progress(project_id, stage="analysis", status="running", percent=5.0, detail="Loading Whisper transcription model...", force_write=True)
     _update_project_status(project_id, "transcribing")
 
     project_dir = Path(settings.MEDIA_DIR) / project_id
@@ -97,7 +68,7 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
 
     if not video_file.exists():
         error_msg = f"Source video not found for analysis: {source_path}"
-        _update_job_status(project_id, "analysis", "failed", error_message=error_msg)
+        update_job_progress(project_id, stage="analysis", status="failed", error_message=error_msg, force_write=True)
         _update_project_status(project_id, "failed")
         raise FileNotFoundError(error_msg)
 
@@ -107,14 +78,17 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
         if transcript_file.exists():
             logger.info(f"[Analysis] Found existing transcript.json for project {project_id}, reusing cached transcript")
             transcript = json.loads(transcript_file.read_text(encoding="utf-8"))
+            update_job_progress(project_id, stage="analysis", percent=60.0, detail=f"Reused cached transcript ({len(transcript.get('segments', []))} segments).", force_write=True)
         else:
             logger.info(f"[Analysis] Transcribing audio for project {project_id}")
-            transcript = transcribe_audio(str(video_file), str(project_dir))
+            transcript = transcribe_audio(str(video_file), str(project_dir), project_id=project_id)
 
         # Step 2: Scene Detection with graceful fallback
+        update_job_progress(project_id, stage="analysis", percent=62.0, detail="Detecting scene cuts & visual boundaries...", force_write=True)
         try:
             logger.info(f"[Analysis] Detecting scenes for project {project_id}")
             scenes = detect_scenes(video_file)
+            update_job_progress(project_id, stage="analysis", percent=75.0, detail=f"Detected {len(scenes)} visual scene cuts.", force_write=True)
         except Exception as e:
             logger.warning(f"[Analysis] Scene detection warning: {e}. Defaulting to continuous scene.")
             scenes = [{
@@ -125,11 +99,25 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
                 "start_frame": 0,
                 "end_frame": int(transcript.get("duration_sec", 60.0) * 30),
             }]
+            update_job_progress(project_id, stage="analysis", percent=75.0, detail="Scene detection fallback applied (single scene).", force_write=True)
 
         # Step 3: Face & Subject Tracking with active speaker detection
+        update_job_progress(project_id, stage="analysis", percent=77.0, detail="Analyzing face & active speaker tracking...", force_write=True)
+
+        def on_face_progress(face_pct: float, detail_msg: str):
+            # Maps face tracking 0-100% into 77% - 94% of analysis stage
+            overall_pct = 77.0 + (face_pct / 100.0) * 17.0
+            update_job_progress(
+                project_id,
+                stage="analysis",
+                percent=round(overall_pct, 1),
+                detail=detail_msg,
+            )
+
         try:
             logger.info(f"[Analysis] Tracking face coordinates for project {project_id}")
-            face_data = track_faces(video_file, transcript=transcript)
+            face_data = track_faces(video_file, transcript=transcript, progress_callback=on_face_progress)
+            update_job_progress(project_id, stage="analysis", percent=95.0, detail="Face tracking complete. Consolidating timeline...", force_write=True)
         except Exception as e:
             logger.warning(f"[Analysis] Face tracking warning: {e}. Defaulting to center-crop.")
             face_data = {
@@ -141,6 +129,7 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
                 "detection_rate": 0.0,
                 "fallback_used": True,
             }
+            update_job_progress(project_id, stage="analysis", percent=95.0, detail="Face tracking fallback applied (center-crop).", force_write=True)
 
         analysis_result = {
             "project_id": project_id,
@@ -178,7 +167,7 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
         finally:
             session.close()
 
-        _update_job_status(project_id, "analysis", "success")
+        update_job_progress(project_id, stage="analysis", status="success", percent=100.0, detail="Analysis complete.", force_write=True)
         logger.info(f"[Analysis] Complete for project {project_id}: {len(transcript.get('segments', []))} transcript segments, {len(scenes)} scenes")
         return analysis_result
 
@@ -186,9 +175,9 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
         error_msg = f"Analysis error: {e}"
         logger.error(f"[Analysis] Error for project {project_id}: {error_msg}")
         if self.request.retries < self.max_retries:
-            _update_job_status(project_id, "analysis", "retrying", error_message=error_msg)
+            update_job_progress(project_id, stage="analysis", status="retrying", error_message=error_msg, force_write=True)
             raise self.retry(exc=e)
         else:
-            _update_job_status(project_id, "analysis", "failed", error_message=error_msg)
+            update_job_progress(project_id, stage="analysis", status="failed", error_message=error_msg, force_write=True)
             _update_project_status(project_id, "failed")
             raise

@@ -115,7 +115,7 @@ def _update_project_status(project_id: str, status: str) -> None:
         session.close()
 
 
-def transcribe_audio(source_path: str, output_dir: str) -> dict:
+def transcribe_audio(source_path: str, output_dir: str, project_id: str | None = None) -> dict:
     """
     Transcribe a video/audio file using faster-whisper.
 
@@ -151,6 +151,19 @@ def transcribe_audio(source_path: str, output_dir: str) -> dict:
 
     logger.info(f"Detected language: {info.language} (probability: {info.language_probability:.2f})")
 
+    if project_id:
+        try:
+            from clipforge_core.services.progress import update_job_progress
+            update_job_progress(
+                project_id=project_id,
+                stage="analysis",
+                percent=5.0,
+                detail="Transcribing audio with Whisper AI...",
+                force_write=True,
+            )
+        except Exception:
+            pass
+
     # Process segments into structured format
     segments = []
     full_text_parts = []
@@ -177,6 +190,34 @@ def transcribe_audio(source_path: str, output_dir: str) -> dict:
         }
         segments.append(seg_data)
         full_text_parts.append(segment.text.strip())
+
+        # Update progress continuously (smoothly throttled by progress.py to prevent DB spam)
+        if project_id and info.duration > 0:
+            whisper_pct = min(100.0, (segment.end / info.duration) * 100.0)
+            overall_pct = 5.0 + (whisper_pct / 100.0) * 55.0
+            try:
+                from clipforge_core.services.progress import update_job_progress
+                update_job_progress(
+                    project_id=project_id,
+                    stage="analysis",
+                    percent=round(overall_pct, 1),
+                    detail=f"Transcribing audio: {round(segment.end, 1)}s / {round(info.duration, 1)}s ({int(whisper_pct)}%)"
+                )
+            except Exception:
+                pass
+
+    if project_id:
+        try:
+            from clipforge_core.services.progress import update_job_progress
+            update_job_progress(
+                project_id=project_id,
+                stage="analysis",
+                percent=60.0,
+                detail=f"Transcription complete: {len(segments)} segments.",
+                force_write=True,
+            )
+        except Exception:
+            pass
 
     full_text = " ".join(full_text_parts)
 

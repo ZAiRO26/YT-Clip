@@ -187,6 +187,8 @@ class Job(Base):
     stage = Column(Text, nullable=False)
     status = Column(Text, nullable=False, server_default=text("'pending'"))
     error_message = Column(Text, nullable=True)
+    progress_percent = Column(Float, nullable=True)
+    progress_detail = Column(Text, nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))

@@ -171,3 +171,20 @@ def test_speaker_tracking_with_transcript_on_synthetic():
     # Speaker tracking had no faces to work with
     assert result["speaker_tracking_used"] is False
     assert 0.4 <= result["average_focal_x"] <= 0.6
+
+
+def test_track_faces_progress_callback():
+    """Verify that track_faces invokes progress_callback during frame processing."""
+    fixture = FIXTURES_DIR / "authorized_explainer_1080p.mp4"
+    assert fixture.exists(), "Fixture missing"
+
+    calls = []
+    def callback(pct: float, detail: str):
+        calls.append((pct, detail))
+
+    result = track_faces(fixture, sample_fps=3.0, progress_callback=callback)
+    assert len(calls) > 0, "progress_callback should have been called"
+    # Final call should be 100.0%
+    assert calls[-1][0] == 100.0
+    assert "Completed face tracking" in calls[-1][1]
+

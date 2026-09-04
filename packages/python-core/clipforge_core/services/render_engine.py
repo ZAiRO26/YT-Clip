@@ -3,11 +3,12 @@ ClipForge AI — Professional FFmpeg Render Engine (v2)
 Renders clips with smart 9:16 reframing, blurred-background vertical layouts, ASS caption burn-in,
 loudnorm audio mastering, and deterministic Render Manifest generation conforming to RENDER_MANIFEST_SCHEMA.json.
 """
+import asyncio
 import logging
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 from clipforge_core.services.caption_renderer import generate_ass_subtitles
 from clipforge_core.services.media_probe import probe_media
@@ -186,6 +187,7 @@ def render_clip(
     caption_style: str = "bold_karaoke",
     transcript_segments: List[Dict[str, Any]] | None = None,
     output_thumbnail_path: str | Path | None = None,
+    progress_callback: Callable[[float], None] | None = None,
 ) -> Dict[str, Any]:
     """
     Renders a 9:16 vertical clip using FFmpeg filtergraphs.
@@ -263,25 +265,67 @@ def render_clip(
         "-b:a", "128k",
         "-ar", "44100",
         "-movflags", "+faststart",
+        "-progress", "pipe:1",
         str(out),
     ]
 
     logger.info(f"[RenderEngine] Rendering clip: {start_sec:.1f}s -> {end_sec:.1f}s (mode={crop_mode}, captions={caption_style})")
 
-    try:
-        subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=180,
-            check=True,
+    async def _run_ffmpeg_async():
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-    except subprocess.CalledProcessError as e:
-        logger.error(f"[RenderEngine] FFmpeg render failed: {e.stderr.strip()[:400]}")
-        raise RenderError(f"FFmpeg render failed: {e.stderr.strip()[:200]}")
-    except subprocess.TimeoutExpired:
-        raise RenderError(f"FFmpeg render timed out after 180s on {out.name}")
+        
+        stderr_output = []
+        
+        async def read_stderr():
+            while True:
+                line = await process.stderr.readline()
+                if not line:
+                    break
+                stderr_output.append(line.decode('utf-8'))
+                
+        async def read_stdout():
+            while True:
+                line = await process.stdout.readline()
+                if not line:
+                    break
+                line_str = line.decode('utf-8').strip()
+                if line_str.startswith("out_time_ms="):
+                    try:
+                        time_ms = int(line_str.split("=")[1])
+                        if duration > 0:
+                            percent = min(100.0, (time_ms / 1000000.0) / duration * 100)
+                            if progress_callback:
+                                progress_callback(percent)
+                    except ValueError:
+                        pass
+                        
+        await asyncio.gather(read_stderr(), read_stdout())
+        await process.wait()
+        
+        if process.returncode != 0:
+            error_details = "".join(stderr_output[-20:])
+            logger.error(f"[RenderEngine] FFmpeg render failed: {error_details[:400]}")
+            raise RenderError(f"FFmpeg render failed: {error_details[:200]}")
+
+    try:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(lambda: asyncio.run(_run_ffmpeg_async()))
+                future.result()
+        else:
+            asyncio.run(_run_ffmpeg_async())
+    except asyncio.TimeoutError:
+        raise RenderError(f"FFmpeg render timed out on {out.name}")
 
     # 4. Generate Thumbnail if requested
     thumb_path = None

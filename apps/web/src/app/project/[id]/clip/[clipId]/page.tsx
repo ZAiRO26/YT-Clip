@@ -26,6 +26,7 @@ export default function ClipEditorPage() {
   const router = useRouter();
   const projectId = params.id as string;
   const clipId = params.clipId as string;
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const [clip, setClip] = useState<ClipDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,7 +53,7 @@ export default function ClipEditorPage() {
 
   const fetchClip = useCallback(async () => {
     try {
-      const res = await fetch(`http://localhost:8000/api/projects/${projectId}/clips`);
+      const res = await fetch(`${apiBase}/api/projects/${projectId}/clips`);
       if (!res.ok) throw new Error("Failed to load clips");
       const clips: ClipDetail[] = await res.json();
       const found = clips.find((c) => c.id === clipId);
@@ -90,7 +91,7 @@ export default function ClipEditorPage() {
   const handleSaveMetadata = async () => {
     try {
       setSavingMetadata(true);
-      const res = await fetch(`http://localhost:8000/api/clips/${clipId}`, {
+      const res = await fetch(`${apiBase}/api/clips/${clipId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -111,7 +112,6 @@ export default function ClipEditorPage() {
   };
 
   const handleDownloadClip = () => {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
     const downloadUrl = `${apiBase}/api/clips/${clipId}/download`;
     const a = document.createElement("a");
     a.href = downloadUrl;
@@ -163,7 +163,7 @@ export default function ClipEditorPage() {
         effects: selectedEffects.map((e) => ({ id: e, intensity: 0.5 })),
       };
 
-      const res = await fetch(`http://localhost:8000/api/clips/${clipId}/rerender`, {
+      const res = await fetch(`${apiBase}/api/clips/${clipId}/rerender`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -171,7 +171,7 @@ export default function ClipEditorPage() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Re-render failed");
+        throw new Error(err.detail || `Re-render failed (HTTP ${res.status})`);
       }
       const data = await res.json();
       toast.success("Clip re-rendered successfully!");
@@ -191,7 +191,7 @@ export default function ClipEditorPage() {
   };
 
   const videoUrl = clip?.file_url
-    ? `${clip.file_url.startsWith("media") ? `http://localhost:8000/${clip.file_url}` : clip.file_url}?v=${videoVersion}`
+    ? `${clip.file_url.startsWith("media") ? `${apiBase}/${clip.file_url}` : clip.file_url}?v=${videoVersion}`
     : "";
 
   if (loading) {

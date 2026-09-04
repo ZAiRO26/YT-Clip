@@ -35,38 +35,7 @@ def _get_project_dir(project_id: str) -> Path:
     return project_dir
 
 
-def _update_job_status(
-    project_id: str,
-    status: str,
-    error_message: str | None = None,
-) -> None:
-    """Update the ingest/download job status in the database."""
-    session = get_sync_session()
-    try:
-        job = (
-            session.query(Job)
-            .filter(
-                Job.project_id == uuid.UUID(project_id),
-                Job.stage.in_(["ingest", "download"]),
-            )
-            .first()
-        )
-
-        if job:
-            job.status = status
-            job.error_message = error_message
-            if status == "running":
-                job.started_at = datetime.now(timezone.utc)
-            if status in ("success", "failed"):
-                job.completed_at = datetime.now(timezone.utc)
-            session.commit()
-        else:
-            logger.warning(f"No ingest/download job found for project {project_id}")
-    except Exception as e:
-        logger.error(f"Failed to update job status: {e}")
-        session.rollback()
-    finally:
-        session.close()
+from clipforge_core.services.progress import update_job_progress
 
 
 def _update_project_status(project_id: str, status: str) -> None:
@@ -155,8 +124,35 @@ def _record_source_asset(
         session.close()
 
 
-def _download_youtube(url: str, output_path: Path) -> dict:
+def _download_youtube(url: str, output_path: Path, project_id: str) -> dict:
     """Download a YouTube video using yt-dlp."""
+    def progress_hook(d: dict):
+        if d['status'] == 'downloading':
+            try:
+                # yt-dlp provides 'downloaded_bytes' and 'total_bytes' (or 'total_bytes_estimate')
+                total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+                downloaded = d.get('downloaded_bytes', 0)
+                if total > 0:
+                    percent = round((downloaded / total) * 100, 1)
+                    speed = d.get('speed', 0)
+                    speed_mb = speed / (1024 * 1024) if speed else 0
+                    update_job_progress(
+                        project_id=project_id,
+                        stage="download",
+                        percent=percent,
+                        detail=f"Downloading: {percent}% at {speed_mb:.1f} MB/s"
+                    )
+            except Exception:
+                pass
+        elif d['status'] == 'finished':
+            update_job_progress(
+                project_id=project_id,
+                stage="download",
+                percent=100.0,
+                detail="Download finished, finalizing...",
+                force_write=True
+            )
+
     ydl_opts = {
         "format": "best[ext=mp4]/bestvideo[height<=1080]+bestaudio/best",
         "outtmpl": str(output_path),
@@ -165,6 +161,7 @@ def _download_youtube(url: str, output_path: Path) -> dict:
         "no_warnings": False,
         "extract_flat": False,
         "noplaylist": True,
+        "progress_hooks": [progress_hook],
     }
 
     try:
@@ -249,7 +246,7 @@ def download_source(self, project_id: str, source_type: str, source_value: str) 
     """
     logger.info(f"[Ingest] Starting for project {project_id}: {source_type} = {source_value}")
 
-    _update_job_status(project_id, "running")
+    update_job_progress(project_id, stage="download", status="running", detail="Starting ingest...")
     _update_project_status(project_id, "downloading")
 
     project_dir = _get_project_dir(project_id)
@@ -257,7 +254,7 @@ def download_source(self, project_id: str, source_type: str, source_value: str) 
 
     try:
         if source_type == "youtube_url":
-            metadata = _download_youtube(source_value, output_path)
+            metadata = _download_youtube(source_value, output_path, project_id)
             source_url = source_value
         elif source_type in ("local_folder", "upload"):
             metadata = _ingest_local_folder(source_value, project_dir)
@@ -301,14 +298,14 @@ def download_source(self, project_id: str, source_type: str, source_value: str) 
             "metadata": metadata,
         }
 
-        _update_job_status(project_id, "success")
+        update_job_progress(project_id, stage="download", status="success", percent=100.0, detail="Ingest complete.", force_write=True)
         logger.info(f"[Ingest] Successfully ingested and probed project {project_id}: {probe_info['width']}x{probe_info['height']} @ {probe_info['fps']}fps, {probe_info['duration_sec']}s")
         return result
 
     except ValueError as e:
         error_msg = str(e)
         logger.error(f"[Ingest] Failed for project {project_id}: {error_msg}")
-        _update_job_status(project_id, "failed", error_message=error_msg)
+        update_job_progress(project_id, stage="download", status="failed", error_message=error_msg, force_write=True)
         _update_project_status(project_id, "failed")
         raise
 
@@ -316,9 +313,9 @@ def download_source(self, project_id: str, source_type: str, source_value: str) 
         error_msg = f"Unexpected error during ingest: {e}"
         logger.error(f"[Ingest] Error for project {project_id}: {error_msg}")
         if self.request.retries < self.max_retries:
-            _update_job_status(project_id, "retrying", error_message=error_msg)
+            update_job_progress(project_id, stage="download", status="retrying", error_message=error_msg, force_write=True)
             raise self.retry(exc=e)
         else:
-            _update_job_status(project_id, "failed", error_message=error_msg)
+            update_job_progress(project_id, stage="download", status="failed", error_message=error_msg, force_write=True)
             _update_project_status(project_id, "failed")
             raise

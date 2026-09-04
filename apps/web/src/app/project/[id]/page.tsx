@@ -30,7 +30,19 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; icon: string }> 
   retrying: { bg: "bg-cf-warn/20", text: "text-cf-warn", icon: "text-cf-warn" },
 };
 
-function PipelineStage({ stage, status, errorMessage }: { stage: string; status: string; errorMessage: string | null }) {
+function PipelineStage({ 
+  stage, 
+  status, 
+  errorMessage,
+  percent,
+  detail
+}: { 
+  stage: string; 
+  status: string; 
+  errorMessage: string | null;
+  percent?: number | null;
+  detail?: string | null;
+}) {
   const styles = STATUS_STYLES[status] || STATUS_STYLES.pending;
   const iconPath = STAGE_ICONS[stage] || "";
 
@@ -58,7 +70,26 @@ function PipelineStage({ stage, status, errorMessage }: { stage: string; status:
           <p className={`text-sm font-medium ${styles.text}`}>
             {STAGE_LABELS[stage] || stage}
           </p>
-          <p className="text-[11px] text-cf-muted capitalize">{status}</p>
+          {status === "running" ? (
+             <div className="mt-1">
+                <div className="flex justify-between text-[10px] mb-1">
+                  <span className="text-cf-muted truncate mr-2" title={detail || "Running..."}>{detail || "Running..."}</span>
+                  {percent != null ? (
+                    <span className="font-medium text-primary">{Math.round(percent)}%</span>
+                  ) : (
+                    <span className="font-medium text-primary">In progress</span>
+                  )}
+                </div>
+                <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-primary transition-all duration-300" 
+                    style={{ width: `${Math.max(5, percent != null ? percent : 5)}%` }} 
+                  />
+                </div>
+             </div>
+          ) : (
+            <p className="text-[11px] text-cf-muted capitalize">{status}</p>
+          )}
         </div>
       </div>
       {errorMessage && (
@@ -530,13 +561,18 @@ export default function ProjectDetailPage() {
             <h2 className="text-base font-semibold mb-4">Pipeline Progress</h2>
             <div className="grid grid-cols-5 gap-3">
               {stageOrder.map((stage) => {
-                const job = project.jobs.find((j) => j.stage === stage);
+                const matchingJobs = project.jobs.filter((j) => j.stage === stage);
+                const job = matchingJobs.length > 0
+                  ? matchingJobs.slice().sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime())[0]
+                  : undefined;
                 return (
                   <PipelineStage
                     key={stage}
                     stage={stage}
                     status={job?.status || "pending"}
                     errorMessage={job?.error_message || null}
+                    percent={job?.progress_percent}
+                    detail={job?.progress_detail}
                   />
                 );
               })}

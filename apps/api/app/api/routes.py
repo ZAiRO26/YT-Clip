@@ -1145,7 +1145,10 @@ async def retry_project_stage(
         render_project_clips.delay(project_id=project_id)
     elif stage in ("transcribe", "analysis"):
         from clipforge_core.workers.analysis import run_analysis
-        run_analysis.delay(project_id=project_id, source_path=f"{settings.MEDIA_DIR}/{project_id}/source.mp4")
+        source_path = f"{settings.MEDIA_DIR}/{project_id}/source.mp4"
+        if not Path(source_path).exists() and project.source_value and Path(project.source_value).exists():
+            source_path = project.source_value
+        run_analysis.delay(project_id=project_id, source_path=source_path)
 
     return {"message": f"Stage '{stage}' re-enqueued for project {project_id}"}
 

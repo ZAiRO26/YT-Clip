@@ -264,6 +264,32 @@
      - **Reclip Duplication Bugfix (`select.py` & `render.py`):** [x] Fixed an architecture flaw where clicking "Generate More Clips" with an unchanged LLM prompt resulted in identical time-bounds being repeatedly inserted as new database rows, causing the render worker to mismatch them against old rows and leaving new rows permanently hanging. `select.py` now cross-references `time_bounds` against existing DB clips before insertion, generating and attaching explicit `clip_id`s in `selections.json`. `render.py` now maps renders directly by `clip_id` instead of loose time boundaries.
      - **Pipeline Progress Broadcasting (`progress.py`):** [x] Fixed a bug where combined pipeline workers (like `render` handling both cropping and captioning) were only updating the first matched job record via `.first()`, leaving secondary stage badges (like Caption) permanently stuck in `pending` on fresh projects. Refactored the progress tracker to execute a bounded `.all()` loop, guaranteeing all aliased pipeline UI badges synchronously reflect underlying worker progress.
 
+ 40. **Session 21 (Launcher Stability, Latent E05 State Recovery & Granular Background Progress):**
+     - **Service Orchestration Hardening (`start.bat`, `start-v2.bat`, `stop.bat`):** [x] Created `stop.bat` for clean 1-click process shutdown. Enhanced `start.bat` with pre-flight port cleanup (Port 8000 & 3000) and Celery termination to prevent port-bind collisions and duplicate worker queue contention. Added Docker daemon health check and PostgreSQL readiness pause.
+     - **Database State Healing for Latent E05 (`0a6e8175`):** [x] Healed project state in PostgreSQL from stale `transcribing` to `done`, updated `Job(stage="transcribe")` to `success` (100%), and cleaned up duplicate pending jobs so dashboard and project header accurately reflect the 20 generated/approved clips.
+     - **Eliminated "Breathing Bar" during Transcription:** [x] Replaced indeterminate progress pulse in `apps/web/src/app/project/[id]/page.tsx` with dynamic progress bars and descriptive background task details.
+     - **Multi-Phase Granular Progress Reporting (`analysis.py`, `transcribe.py`, `face_tracker.py`):** [x] Structured analysis into 4 distinct reported stages:
+       1. Whisper Model Load & Audio Transcription (5% to 60%) with per-segment seconds elapsed vs total duration.
+       2. PySceneDetect Boundary Detection (60% to 75%) reporting visual cut discovery.
+       3. MediaPipe Face & Active Speaker Tracking (75% to 95%) with real-time frame progress callback (`test_track_faces_progress_callback` verified).
+       4. Timeline Consolidation & Final Audit (95% to 100%).
+     - **TypeScript Interface Sync:** [x] Added `progress_percent` and `progress_detail` to `JobStatus` in `apps/web/src/lib/api.ts`.
 
-
-
+ 41. **Session 22 (Voiceover Re-render Event Loop Bugfix & Full Browser Smoke Test):**
+     - **Root Cause Discovered & Resolved:** In `packages/python-core/clipforge_core/services/render_engine.py` line 315, `render_clip` invoked `asyncio.run(_run_ffmpeg_async())`. When triggered from FastAPI's asynchronous route `rerender_single_clip` (`apps/api/app/api/routes.py`), Python raised `RuntimeError: asyncio.run() cannot be called from a running event loop`. Because the unhandled exception bypassed Starlette's standard CORS headers, the browser's `fetch()` threw `TypeError: Failed to fetch`.
+     - **Event Loop Decoupling:** Updated `render_clip` in `render_engine.py` to detect if an asyncio event loop is active (`asyncio.get_running_loop()`). If running inside an existing loop, it executes `_run_ffmpeg_async()` inside an isolated `concurrent.futures.ThreadPoolExecutor(max_workers=1)`, allowing FFmpeg to run asynchronously with full progress tracking without conflicting with FastAPI's event loop.
+     - **Global Exception & CORS Hardening:** Added `@app.exception_handler(Exception)` in `apps/api/app/main.py` ensuring any server error logs full stack trace and returns informative JSON `{ "detail": str(exc), "type": ... }` with proper `Access-Control-Allow-Origin` headers, eliminating opaque `Failed to fetch` errors across the application.
+     - **Launcher Script Hardening (`start.bat` & `stop.bat`):** Streamlined PowerShell one-liners in both scripts to avoid cmd.exe multi-line argument mangling, and added `--reload-dir apps/api --reload-dir packages/python-core` to `start.bat` so uvicorn automatically tracks changes in shared core libraries.
+     - **Studio Frontend Alignment (`page.tsx`):** Standardized API calls on `apiBase` (`process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"`) and improved error message extraction in `handleRerender`.
+     - **Live Browser Smoke Test Verified:** Ran end-to-end browser subagent session verifying:
+       1. Clip Studio re-rendering with Kokoro voiceover (`af_nicole`), Bold Karaoke captions, and face tracking succeeded with HTTP 200 and updated video in 21.2s.
+       2. Project review page verified with all 5 pipeline badges active and green.
+       3. Main Dashboard and New Project creation form (YouTube URL, Local File/Folder explorers, Rights declaration, Editorial templates, Framing & Effects) verified.
+     - **Full Test Suite Verification:** [x] 101/101 Python core tests passing (100% pass rate in 467.01s); 12/12 face tracker tests passing; Next.js 16 TypeScript typecheck clean with 0 errors.
+     - **Newly Created Files (Sessions 21–22):**
+        - `stop.bat`
+        - `packages/python-core/clipforge_core/migrations/versions/70e87509f319_add_job_progress_columns.py`
+     - **Immediate Next Steps:**
+        - Production Video Ingestion Testing: Submit fresh YouTube URLs across varied formats to verify end-to-end autonomous clipping.
+        - Batch Processing / Folder Ingestion: Test the folder-level multi-file ingestion workflow with the native folder explorer.
+        - Queue & Performance Monitoring: Monitor Celery task queue concurrency and processing duration under multi-clip workloads.

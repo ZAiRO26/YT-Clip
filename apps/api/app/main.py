@@ -14,6 +14,7 @@ from clipforge_core.database import async_session_factory
 from clipforge_core.services.llm_client import llm_client
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
@@ -46,6 +47,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception(f"Unhandled server error on {request.method} {request.url.path}: {exc}")
+    origin = request.headers.get("origin", "*")
+    response = JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "type": type(exc).__name__},
+    )
+    response.headers["Access-Control-Allow-Origin"] = origin if origin != "null" else "*"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 
 @app.middleware("http")
