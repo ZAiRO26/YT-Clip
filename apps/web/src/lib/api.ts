@@ -242,10 +242,10 @@ class ApiClient {
     return this.request<VoiceoverContext>(`/api/clips/${clipId}/voiceover-context`);
   }
 
-  async generateVoiceoverScript(clipId: string, style: string) {
+  async generateVoiceoverScript(clipId: string, style: string, voiceId: string = "af_bella") {
     return this.request<GeneratedVoiceoverScript>(`/api/clips/${clipId}/generate-voiceover-script`, {
       method: "POST",
-      body: JSON.stringify({ style }),
+      body: JSON.stringify({ style, voice_id: voiceId }),
     });
   }
 

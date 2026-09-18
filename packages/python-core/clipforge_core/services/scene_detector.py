@@ -11,7 +11,11 @@ from scenedetect import ContentDetector, SceneManager, open_video
 logger = logging.getLogger(__name__)
 
 
-def detect_scenes(video_path: str | Path, threshold: float = 27.0) -> List[Dict[str, Any]]:
+def detect_scenes(
+    video_path: str | Path,
+    threshold: float = 27.0,
+    progress_callback: Any | None = None,
+) -> List[Dict[str, Any]]:
     """
     Detect cut scenes and return structured list of time boundaries.
     """
@@ -26,8 +30,15 @@ def detect_scenes(video_path: str | Path, threshold: float = 27.0) -> List[Dict[
     scene_manager.auto_downscale = True
     scene_manager.add_detector(ContentDetector(threshold=threshold))
 
+    total_frames = video.duration.frame_num if video.duration else 1
+
+    def _on_frame(img, frame_timecode):
+        if progress_callback and frame_timecode.frame_num % 100 == 0:
+            pct = min(100.0, (frame_timecode.frame_num / total_frames) * 100.0)
+            progress_callback(pct, f"Detecting visual scene cuts: {frame_timecode.frame_num:,} / {total_frames:,} frames ({int(pct)}%)")
+
     # Detect cut scenes with 4-frame skipping for 4x speedup on long videos
-    scene_manager.detect_scenes(video, frame_skip=4)
+    scene_manager.detect_scenes(video, frame_skip=4, callback=_on_frame if progress_callback else None)
     scene_list = scene_manager.get_scene_list()
 
     scenes = []

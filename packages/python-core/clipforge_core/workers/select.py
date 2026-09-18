@@ -181,6 +181,15 @@ def select_clips(
     Candidate selection task running on the 'llm' queue.
     """
     logger.info(f"[LLM Select] Starting candidate selection for project {project_id}")
+    session_check = get_sync_session()
+    try:
+        proj_check = session_check.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
+        if not proj_check:
+            logger.warning(f"[LLM Select] Project {project_id} not found in database. Aborting orphaned select task.")
+            return {"error": "Project not found"}
+    finally:
+        session_check.close()
+
     update_job_progress(project_id, stage="select", status="running", percent=10.0, detail="Parsing transcript & brief...")
     _update_project_status(project_id, "selecting")
 

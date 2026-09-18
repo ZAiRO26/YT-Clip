@@ -109,6 +109,34 @@ def _get_face_center_x(bbox) -> float:
     return max(0.0, min(1.0, float(bbox.xmin + bbox.width / 2.0)))
 
 
+def _compute_standard_score(history: List[float], mar: float) -> float:
+    """Standard MAR score formula: mar_variance * 10.0 + mar * 2.0 (or mar * 2.0 if <2 samples)."""
+    if len(history) >= 2:
+        mean_mar = sum(history) / len(history)
+        mar_variance = sum((m - mean_mar) ** 2 for m in history) / len(history)
+        return mar_variance * 10.0 + mar * 2.0
+    return mar * 2.0
+
+
+def _compute_enhanced_score(
+    history: List[float],
+    mar: float,
+    center_x: float,
+    last_speaker_x: float,
+    is_speech_active: bool,
+) -> float:
+    """
+    Enhanced composite score fusing visual MAR, spatial stability, and speech recency:
+    - 60% Visual lip movement: mar_variance * 10.0 + mar * 2.0
+    - 30% Spatial stability: 1.0 - abs(center_x - last_speaker_x)
+    - 10% Speech recency: mar * 3.0 if speech active else 0.0
+    """
+    visual_score = _compute_standard_score(history, mar)
+    stability_score = max(0.0, 1.0 - abs(center_x - last_speaker_x))
+    recency_score = mar * 3.0 if is_speech_active else 0.0
+    return visual_score * 0.6 + stability_score * 0.3 + recency_score * 0.1
+
+
 def track_faces(
     video_path: str | Path,
     sample_fps: float = 3.0,
@@ -116,6 +144,7 @@ def track_faces(
     min_detection_confidence: float = 0.5,
     transcript: Optional[Dict[str, Any]] = None,
     progress_callback: Optional[Callable[[float, str], None]] = None,
+    tracking_mode: str = "standard",  # "standard" | "enhanced"
 ) -> Dict[str, Any]:
     """
     Track the active speaker's face across the video timeline.
@@ -130,6 +159,8 @@ def track_faces(
         smoothing_factor: EMA smoothing for focal_x (0.0 = no change, 1.0 = instant jump).
         min_detection_confidence: Minimum confidence for BlazeFace detection.
         transcript: Optional transcript dict with word-level timestamps for speech detection.
+        progress_callback: Optional callback for progress reporting.
+        tracking_mode: "standard" (existing behavior) or "enhanced" (dwell timer + signal fusion + group fallback).
 
     Returns:
         Dict with timeline, statistics, and speaker tracking metadata.
@@ -164,7 +195,7 @@ def track_faces(
                 min_detection_confidence=0.4,
                 min_tracking_confidence=0.3,
             )
-            logger.info(f"[FaceTrack] Active speaker detection enabled ({len(speech_intervals)} speech intervals)")
+            logger.info(f"[FaceTrack] Active speaker detection enabled ({len(speech_intervals)} speech intervals, mode={tracking_mode})")
     except Exception as e:
         logger.warning(f"MediaPipe initialization failed: {e}. Defaulting to center-crop.")
         face_detector = None
@@ -174,7 +205,7 @@ def track_faces(
         if cap.isOpened():
             cap.release()
         logger.warning(f"Using center-crop fallback for {path.name}")
-        return {
+        fallback_res = {
             "timeline": [],
             "average_focal_x": 0.5,
             "std_dev_focal_x": 0.0,
@@ -184,7 +215,12 @@ def track_faces(
             "fallback_used": True,
             "speaker_tracking_used": False,
             "message": "MediaPipe unavailable or video unreadable, defaulted to center-crop",
+            "tracking_mode": tracking_mode,
         }
+        if tracking_mode == "enhanced":
+            fallback_res["dwell_switches"] = 0
+            fallback_res["dwell_rejections"] = 0
+        return fallback_res
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     video_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -198,9 +234,17 @@ def track_faces(
     speaker_tracking_activations = 0
 
     # Sliding window for mouth movement variance (last N frames per face position bucket)
-    # We track MAR history keyed by approximate face x-position (quantized to 10% buckets)
     mar_history: Dict[int, List[float]] = {}
     _MAR_WINDOW_SIZE = 5
+
+    # Enhanced mode state
+    _DWELL_FRAMES = 2  # ~667ms at 3fps
+    dwell_switches = 0
+    dwell_rejections = 0
+    current_speaker_bucket: Optional[int] = None
+    pending_speaker_bucket: Optional[int] = None
+    dwell_counter = 0
+    last_speech_time = 0.0
 
     frame_idx = 0
     try:
@@ -226,6 +270,11 @@ def track_faces(
                 target_x = current_smoothed_x
                 num_faces = 0
 
+                speech_now = _is_speech_active(time_sec, speech_intervals)
+                if speech_now:
+                    last_speech_time = time_sec
+                silence_duration = max(0.0, time_sec - last_speech_time)
+
                 if results and results.detections:
                     num_faces = len(results.detections)
                     detected = True
@@ -235,32 +284,96 @@ def track_faces(
                         # Single face: use it directly (fastest path, no FaceMesh needed)
                         bbox = results.detections[0].location_data.relative_bounding_box
                         target_x = _get_face_center_x(bbox)
+                        if tracking_mode == "enhanced":
+                            current_speaker_bucket = int(target_x * 10)
+                            pending_speaker_bucket = None
+                            dwell_counter = 0
 
-                    elif num_faces > 1 and face_mesh is not None and _is_speech_active(time_sec, speech_intervals):
-                        # Multi-face + speech active: use FaceMesh lip movement to find speaker
-                        speaker_x = _find_active_speaker(
-                            rgb_frame, results.detections, face_mesh, mar_history, _MAR_WINDOW_SIZE
-                        )
-                        if speaker_x is not None:
-                            target_x = speaker_x
-                            speaker_tracking_activations += 1
+                    elif tracking_mode == "standard":
+                        # Standard mode: EXACT existing logic and formula — zero change
+                        if num_faces > 1 and face_mesh is not None and speech_now:
+                            speaker_x = _find_active_speaker(
+                                rgb_frame, results.detections, face_mesh, mar_history, _MAR_WINDOW_SIZE
+                            )
+                            if speaker_x is not None:
+                                target_x = speaker_x
+                                speaker_tracking_activations += 1
+                            else:
+                                target_x = _pick_largest_face(results.detections)
+                        elif num_faces > 1 and face_mesh is not None and not speech_now:
+                            target_x = current_smoothed_x
                         else:
-                            # FaceMesh couldn't determine speaker; fall back to largest face
                             target_x = _pick_largest_face(results.detections)
 
-                    elif num_faces > 1 and face_mesh is not None and not _is_speech_active(time_sec, speech_intervals):
-                        # Multi-face + silence: hold last known position (no jump)
-                        target_x = current_smoothed_x
+                    elif tracking_mode == "enhanced":
+                        # Enhanced mode: fused scoring, dwell timer, and group fallback
+                        if num_faces > 1 and face_mesh is not None and speech_now:
+                            candidate_x, score = _find_active_speaker_enhanced(
+                                rgb_frame,
+                                results.detections,
+                                face_mesh,
+                                mar_history,
+                                _MAR_WINDOW_SIZE,
+                                last_speaker_x=current_smoothed_x,
+                                is_speech_active=True,
+                            )
+                            if candidate_x is not None:
+                                candidate_bucket = int(candidate_x * 10)
+                                if current_speaker_bucket is None:
+                                    current_speaker_bucket = candidate_bucket
+                                    target_x = candidate_x
+                                    speaker_tracking_activations += 1
+                                elif candidate_bucket == current_speaker_bucket:
+                                    target_x = candidate_x
+                                    pending_speaker_bucket = None
+                                    dwell_counter = 0
+                                else:
+                                    # Candidate is a different speaker
+                                    if pending_speaker_bucket == candidate_bucket:
+                                        dwell_counter += 1
+                                        if dwell_counter >= _DWELL_FRAMES:
+                                            # Sustained switch confirmed!
+                                            current_speaker_bucket = candidate_bucket
+                                            target_x = candidate_x
+                                            dwell_switches += 1
+                                            speaker_tracking_activations += 1
+                                            pending_speaker_bucket = None
+                                            dwell_counter = 0
+                                        else:
+                                            # Still dwelling, hold current position
+                                            target_x = current_smoothed_x
+                                            dwell_rejections += 1
+                                    else:
+                                        # New pending candidate
+                                        pending_speaker_bucket = candidate_bucket
+                                        dwell_counter = 1
+                                        target_x = current_smoothed_x
+                                        dwell_rejections += 1
+                            else:
+                                # Group shot fallback: no face scored above threshold during speech
+                                target_x = 0.5
 
-                    else:
-                        # Multi-face but no FaceMesh or no transcript: largest face
-                        target_x = _pick_largest_face(results.detections)
+                        elif num_faces > 1 and face_mesh is not None and not speech_now:
+                            # Multi-face during silence
+                            if silence_duration > 2.0:
+                                # Prolonged silence: drift toward center group shot 0.5
+                                target_x = 0.5
+                            else:
+                                # Short silence: hold last known position
+                                target_x = current_smoothed_x
+                        else:
+                            # Multi-face without FaceMesh or transcript
+                            target_x = _pick_largest_face(results.detections)
 
                 # Apply exponential moving average smoothing
+                eff_smoothing = smoothing_factor
+                if tracking_mode == "enhanced" and num_faces > 1 and not speech_now and silence_duration > 2.0:
+                    eff_smoothing = smoothing_factor * 0.3
+
                 if total_samples == 1:
                     current_smoothed_x = target_x
                 else:
-                    current_smoothed_x = (smoothing_factor * target_x) + ((1.0 - smoothing_factor) * current_smoothed_x)
+                    current_smoothed_x = (eff_smoothing * target_x) + ((1.0 - eff_smoothing) * current_smoothed_x)
 
                 timeline.append({
                     "time_sec": time_sec,
@@ -300,13 +413,13 @@ def track_faces(
     logger.info(
         f"[FaceTrack] Finished {path.name}: {faces_detected_count}/{total_samples} samples ({detection_rate*100:.1f}%), "
         f"avg_focal_x={avg_x:.3f}, std_dev={std_dev_x:.3f}, fallback_used={fallback_used}, "
-        f"speaker_tracking_activations={speaker_tracking_activations}"
+        f"speaker_tracking_activations={speaker_tracking_activations}, mode={tracking_mode}"
     )
 
     if progress_callback:
         progress_callback(100.0, f"Completed face tracking across {total_samples} samples.")
 
-    return {
+    result_dict = {
         "video_duration_sec": round(duration, 3),
         "total_samples": total_samples,
         "faces_detected_samples": faces_detected_count,
@@ -317,7 +430,13 @@ def track_faces(
         "speaker_tracking_used": speaker_tracking_activations > 0,
         "speaker_tracking_activations": speaker_tracking_activations,
         "timeline": timeline,
+        "tracking_mode": tracking_mode,
     }
+    if tracking_mode == "enhanced":
+        result_dict["dwell_switches"] = dwell_switches
+        result_dict["dwell_rejections"] = dwell_rejections
+
+    return result_dict
 
 
 def _pick_largest_face(detections) -> float:
@@ -342,12 +461,7 @@ def _find_active_speaker(
 ) -> Optional[float]:
     """
     Identify the active speaker among multiple detected faces using lip movement analysis.
-
-    For each detected face:
-    1. Run FaceMesh to extract 468 facial landmarks
-    2. Compute Mouth Aspect Ratio (MAR)
-    3. Track MAR variance over a sliding window
-    4. The face with the highest MAR variance (most lip movement) is the active speaker
+    Standard mode: pure visual lip movement (mar_variance * 10.0 + mar * 2.0).
 
     Returns the normalized center_x of the active speaker, or None if undetermined.
     """
@@ -383,7 +497,6 @@ def _find_active_speaker(
     if not face_candidates:
         return None
 
-    # Update MAR history and compute variance for each face bucket
     best_speaker_x = None
     best_score = -1.0
 
@@ -392,27 +505,89 @@ def _find_active_speaker(
             mar_history[bucket] = []
         mar_history[bucket].append(mar)
 
-        # Keep only last N entries
         if len(mar_history[bucket]) > window_size:
             mar_history[bucket] = mar_history[bucket][-window_size:]
 
         history = mar_history[bucket]
-
-        # Score = MAR variance (lip movement) + current MAR (mouth openness)
-        # Variance captures dynamic movement; current MAR captures instantaneous state
-        if len(history) >= 2:
-            mean_mar = sum(history) / len(history)
-            mar_variance = sum((m - mean_mar) ** 2 for m in history) / len(history)
-            score = mar_variance * 10.0 + mar * 2.0
-        else:
-            score = mar * 2.0
+        score = _compute_standard_score(history, mar)
 
         if score > best_score:
             best_score = score
             best_speaker_x = center_x
 
-    # Only return speaker if there's meaningful lip movement detected
     if best_score < 0.01:
         return None
 
     return best_speaker_x
+
+
+def _find_active_speaker_enhanced(
+    rgb_frame: np.ndarray,
+    detections,
+    face_mesh,
+    mar_history: Dict[int, List[float]],
+    window_size: int,
+    last_speaker_x: float = 0.5,
+    is_speech_active: bool = True,
+) -> Tuple[Optional[float], float]:
+    """
+    Enhanced active speaker detection using multi-signal fusion:
+    - 60% Visual lip movement: mar_variance * 10.0 + mar * 2.0
+    - 30% Spatial stability: 1.0 - abs(center_x - last_speaker_x)
+    - 10% Speech recency: mar * 3.0 if speech active else 0.0
+
+    Returns (speaker_center_x, best_score), or (None, 0.0) if below threshold.
+    """
+    face_candidates = []
+    h, w = rgb_frame.shape[:2]
+
+    for det in detections:
+        bbox = det.location_data.relative_bounding_box
+        center_x = _get_face_center_x(bbox)
+
+        x1 = max(0, int((bbox.xmin - 0.05) * w))
+        y1 = max(0, int((bbox.ymin - 0.05) * h))
+        x2 = min(w, int((bbox.xmin + bbox.width + 0.05) * w))
+        y2 = min(h, int((bbox.ymin + bbox.height + 0.05) * h))
+
+        if x2 - x1 < 20 or y2 - y1 < 20:
+            continue
+
+        face_crop = rgb_frame[y1:y2, x1:x2]
+        mesh_results = face_mesh.process(face_crop)
+
+        mar = 0.0
+        if mesh_results and mesh_results.multi_face_landmarks:
+            landmarks = mesh_results.multi_face_landmarks[0].landmark
+            mar = _compute_mouth_aspect_ratio(landmarks, bbox.xmin, bbox.ymin, bbox.width, bbox.height)
+
+        bucket = int(center_x * 10)
+        face_candidates.append((center_x, mar, bucket))
+
+    if not face_candidates:
+        return None, 0.0
+
+    best_speaker_x = None
+    best_score = -1.0
+
+    for center_x, mar, bucket in face_candidates:
+        if bucket not in mar_history:
+            mar_history[bucket] = []
+        mar_history[bucket].append(mar)
+
+        if len(mar_history[bucket]) > window_size:
+            mar_history[bucket] = mar_history[bucket][-window_size:]
+
+        history = mar_history[bucket]
+        score = _compute_enhanced_score(
+            history, mar, center_x, last_speaker_x, is_speech_active
+        )
+
+        if score > best_score:
+            best_score = score
+            best_speaker_x = center_x
+
+    if best_score < 0.005:
+        return None, best_score
+
+    return best_speaker_x, best_score

@@ -207,16 +207,105 @@
 - **Phase 5 (Editorial Transformation):** [x] Completed
 - **Phase 6 (Voiceover & Audio):** [x] Completed
 - **Phase 7 (Motion Effects):** [x] Completed
+- **Session 24 (Stacked Context + Speaker Layout & Watertight Speaker Detection — v2):** ✅ 100% Complete
+  - **Mandatory Confirmation 1 (Dynamic Crop Actually Moves Per-Frame):** Rendered 20s clip on India's Got Latent fixture (`scratch/confirmation_1/latent_stacked_speaker.mp4`) with `crop_mode="stacked_speaker"`. Extracted frames at $t=2.0\text{s}$ (bottom band centered at $x=958$ on right speaker) and $t=17.0\text{s}$ (bottom band centered at $x=0$ on left speaker). Measured $958\text{px}$ dynamic shift (49.9% of source width) following active speaker changes.
+  - **Mandatory Confirmation 2 (Filter Graph Command-Length Handling):** Passed complex filtergraphs via `-filter_complex_script` with temporary files, avoiding Windows command-line truncation. Validated on a $58\text{-second}$ clip with 60 dynamic keyframes, rendering cleanly in $55.03\text{s}$ to $1080\times 1920$.
+  - **Watertight Speaker Detection & Dwell Gating (`face_tracker.py`):** Added `tracking_mode="standard" | "enhanced"`. Preserved exact standard scoring formula (`mar_variance * 10.0 + mar * 2.0`), while enhanced mode strictly implements the approved fused scoring formula (`visual_score * 0.6 + stability_score * 0.3 + recency_score * 0.1`), 2-frame dwell hysteresis, and silent group fallback drifting towards center.
+  - **Stacked Context Layout Engine (`render_engine.py`):** Constructed $1080\times 1920$ canvas with top band ($710\text{px}$, 16:9 padded letterbox), bottom band ($1210\text{px}$, dynamic close-up), and 2px divider (`color=white@0.8` at $y=709$ drawn in-place across the seam so canvas height is exactly $710+1210=1920\text{px}$). Configured `MarginV: 140` in `caption_renderer.py` for safe bottom-band captioning.
+  - **Schemas, Migrations & API Routes:** Updated `ProjectCreate` and `ClipRerenderRequest` schemas; added `ck_projects_crop_mode` check constraint and Alembic migration `8a2b3c4d5e6f`; wired `focal_timeline` slicing into `apps/api/app/api/routes.py`.
+  - **Frontend UI (`apps/web`):** Added 4th framing mode button `📺 Stacked Context` on `/new` project form and Clip Studio `/project/[id]/clip/[clipId]`.
+  - **Non-Negotiable Regression Requirement 3:** Exact match confirmed on baseline `face_track` crop coordinates before and after changes (`x=944, y=0, w=607, h=1080`).
+  - **Live Localhost Smoke Test & Real-Time Re-render:** Launched servers on localhost:3000 (Next.js 16) and localhost:8000 (FastAPI) with active Celery workers. Ran browser subagent verifying `/dashboard`, `/new` (confirming `📺 Stacked Context` button is active and selectable), and Clip Studio `/project/[id]/clip/[clipId]`. Selected `📺 Stacked Context` + `⚡ Bold Karaoke` captions, triggered re-render, and verified live video playback showing top 16:9 context, 2px divider, bottom speaker tracking, and safe-zone karaoke captions.
+  - **Full Test Suite & Build Verification:** 117/117 Python core tests passing; Next.js 16 build passing cleanly.
+
+- **Session 25 (Voiceover Studio Manifest Persistence, State Hydration & Comprehensive Full-Feature Smoke Test):** ✅ 100% Complete
+  - **Root Cause Diagnosed & Resolved (Voiceover Not Applied on Studio Re-render):**
+    - Identified that `apps/web/src/app/project/[id]/clip/[clipId]/page.tsx` loaded the clip record but never hydrated local React states (`voiceoverText`, `cropMode`, `captionStyle`, `voiceId`, `musicTrack`, `selectedEffects`) from `clip.render_manifest`. On page load/reload, `voiceoverText` defaulted to empty string `""` and `cropMode` defaulted to `face_track`. When users clicked re-render without freshly regenerating the script in that browser session, an empty voiceover string was dispatched, causing `audio_mixer` to log `VO=no`.
+    - Identified that `apps/api/app/api/routes.py` omitted writing `editorial.narration_script`, `audio.voice_id`, `audio.voiceover_start_offset_sec`, and `audio.music_track` into `manifest.json` on re-render, preventing subsequent reloads from retaining audio settings.
+  - **Manifest Persistence & API Synchronization (`routes.py` & `script_generator.py`):**
+    - Updated `rerender_single_clip` in `apps/api/app/api/routes.py` to persist full editorial and audio fields into `manifest.json`: `editorial.narration_script`, `editorial.narration_status = "approved"`, `editorial.hook_text`, `audio.voice_id`, `audio.voiceover_start_offset_sec`, `audio.voiceover_duration_sec`, and `audio.music_track`.
+    - Added `voiceover_text`, `voice_id`, `crop_mode`, and `music_track` to `ClipUpdate` schema and `PATCH /api/clips/{clip_id}` for fast metadata persistence.
+    - Updated `generate_clip_voiceover_script` and `packages/python-core/clipforge_core/services/script_generator.py` with `voice_id: str = "af_bella"` parameter, dynamically selecting British vs US English phonemizer language and Kokoro voice persona (`am_adam`, `bm_george`, `bf_emma`, etc.) for real-time audio previews.
+  - **Frontend Studio State Hydration & Live Status Badging (`page.tsx` & `api.ts`):**
+    - Added full manifest hydration in `fetchClip()` across `crop.mode`, `captions.preset`, `editorial.narration_script`, `audio.voice_id`, `audio.voiceover_start_offset_sec`, `audio.music_track`, and `effects.layers`.
+    - Added real-time Active Features Pill Bar directly above the video player, dynamically surfacing:
+      * Layout mode: `📺 Stacked Context` / `🌫️ Blurred BG` / `📐 Center Crop` / `👤 Face Track 9:16`
+      * Caption preset: `💬 bold karaoke` / `💬 minimal` / `💬 clean subtitle` / `🚫 No Captions`
+      * Studio voice persona: `🎙️ VO: adam` / `🎙️ VO: bella` (or `🎙️ No Voiceover`)
+      * Ambient music bed: `🎵 lofi beats` / `🎵 ambient focus` / `🎵 upbeat tech` (or `🎵 No Music`)
+      * Active visual effects: `✨ X Effects` (amber badge)
+      * Transformation score badge (`Score: XX/100`)
+    - Updated `handleRerender` to re-fetch full clip details (`await fetchClip()`) immediately upon render completion.
+  - **Live Browser Smoke Test & Multi-Feature Studio Verification (`clip/32816f29-9019-4dd3-82cb-8df82eb0e6dc`):**
+    - Tested Dog Naming Disaster clip (`1222.3s - 1260.0s`).
+    - Configured and combined all major creative features simultaneously:
+      1. Layout: `📺 Stacked Context` (16:9 context top + dynamic speaker zoom bottom)
+      2. Captions: `⚡ Bold Karaoke` (yellow active-word bounce styling)
+      3. Studio Voice Persona: `Adam — Clear & Punchy (US Male)` (`am_adam`)
+      4. Auto-Drafted Script: Hook Intro (*"Dog lovers, prepare for a surprise!"*, 41 chars, 2.65s audio duration, starts at 0.5s)
+      5. Ambient Music: `☕ Chill Lo-Fi` (`lofi_beats` bed with dynamic -8dB speech ducking)
+      6. Visual Effects: `🎞️ Film Grain`
+    - Re-rendered clip: Kokoro TTS synthesized Adam's voiceover, `EffectsEngine` applied film grain, and `AudioMixer` completed 3-channel mix (source dialogue ducked -12dB + voiceover + lo-fi music ducked -8dB, mastered to -14 LUFS) with `VO=yes, Music=yes`.
+    - Studio UI dynamically updated with active badges: `📺 Stacked Context` | `💬 bold karaoke` | `🎙️ VO: adam` | `🎵 lofi beats` | `✨ 1 Effect`.
+    - Captured visual confirmation screenshot: `smoke_test_complete_1788700565559.png`.
+  - **Test Suite & Typecheck Verification:**
+    - Next.js 16 build passing typecheck and compiling with 0 errors (`pnpm --filter @clipforge/web build`).
+    - Python core tests: 16/16 tests passing in `test_speaker_dwell.py` and `test_stacked_render.py` in 18.76s.
+
+## Key Capabilities (Production Ready)
+- Video Ingestion (YouTube URL via yt-dlp & Local Video files) ✅
+- Local Whisper AI Transcription (faster-whisper GPU/CPU) ✅
+- LLM Candidate Selection (Structured JSON output with candidate scoring) ✅
+- Editorial Script Generation (Hook intro, narration, and CTA templates) ✅
+- Automated Face-Tracking & Framing (BlazeFace 9:16 vertical crop) ✅
+- Active Speaker Detection & Dwell Hysteresis (MediaPipe FaceMesh 468 landmarks) ✅
+- Stacked Context + Speaker Layout (16:9 Context Top + Dynamic Speaker Zoom Bottom) ✅
+- Word-Level Karaoke Subtitles (ASS subtitle generator with per-word bounce) ✅
+- Motion & Visual Effects Engine (8 social vertical video effects) ✅
+- Single Clip Editor Studio & Before/After Comparison Player ✅
+- Voiceover TTS Synthesis Engine (Kokoro ONNX multi-persona with dynamic ducking) ✅
+- State Hydration & Live Active Feature Badges in Clip Studio ✅
+- Brand Kit Data Model & CRUD APIs ✅
+- Disk Asset Retention & Temp Media Cleanup Service ✅
+- Stage-Level Pipeline Retry & Error Recovery (`POST /api/projects/{id}/retry-stage`) ✅
+- In-Product "Rights and Originality Checklist" Component ✅
+- Local-first Storage System with MinIO / S3 fallback ✅
+- Local Workspace Entity & Solo Creator mode ✅
+- Server-Sent Events (SSE) `/api/projects/{id}/events` & `/api/projects/{id}/audit-trail` ✅
+- Test fixture set & 117/117 passing tests ✅
+
+## Phases
+- **Phase 0 (Policy & Docs):** [x] Completed
+- **Phase 1 (Foundation):** [x] Completed
+- **Phase 2 (Ingestion & Analysis):** [x] Completed
+- **Phase 3 (Brief-Aware Selection):** [x] Completed
+- **Phase 4 (First Render):** [x] Completed
+- **Phase 5 (Editorial Transformation):** [x] Completed
+- **Phase 6 (Voiceover & Audio):** [x] Completed
+- **Phase 7 (Motion Effects):** [x] Completed
 - **Phase 8 (Clip Editor & Brand Kits):** [x] Completed
 - **Phase 9 (Testing & Reliability):** [x] Completed
 - **Phase 10 (Scale Readiness):** [x] Completed
 
-## Newly Created Files (Sessions 21–22)
-- `stop.bat`: One-click graceful process shutdown script for FastAPI, Next.js, Celery workers, Redis, and Postgres.
-- `packages/python-core/clipforge_core/migrations/versions/70e87509f319_add_job_progress_columns.py`: Alembic migration for durable `progress_percent` and `progress_detail` tracking on `Job` records.
+## Newly Created & Modified Files (Session 31 — Latent S2 EP7 20-Clip Ingestion)
+- `PROGRESS.md`: Documented project `709251b2-a7f1-46ac-9952-7467df4d667c` creation and pipeline kickoff.
+- `STATUS.md`: Updated active processing state.
+
+## Current State & Achievements
+- **20-Clip Generation Complete:** Project `709251b2-a7f1-46ac-9952-7467df4d667c` (*India's Got Latent S2 EP7 - 20 Best Shorts*, 53 min / 3207s) successfully processed from YouTube URL to 20 rendered vertical 9:16 shorts.
+- **Configured Settings Verified:**
+  * Target: 20 clips (20s–60s duration).
+  * Framing: `📺 Stacked Context` (`stacked_speaker` mode: 16:9 context top + speaker zoom bottom).
+  * Subtitles: `⚡ Bold Karaoke` (`bold_karaoke` yellow active-word bounce pop).
+  * Music Bed: `🧘 Ambient Focus` with -12dB dynamic sidechain ducking.
+  * Selection Strategy: `🎭 Balanced Mix` with `🌐 Dynamic Temporal Binning`.
+  * Rights: `written_permission` ("Open license to cut shorts on this video").
+- **Pipeline Stages:** All 5 stages marked `success` 100% (Download, Transcribe, Select, Crop, Caption).
+- **Disk Outputs:** 20 rendered MP4s (`clip_1.mp4`–`clip_20.mp4`), ASS karaoke subtitle files, thumbnails, and Draft-07 manifests saved in `media/709251b2-a7f1-46ac-9952-7467df4d667c/clips/`.
+- **Infrastructure:** 100% native Windows services running (Postgres 16 on 5432, Redis 8.8.0 on 6379, FastAPI on 8000, Next.js on 3000, Celery, OmniRoute on 20128). Docker completely decommissioned.
 
 ## Immediate Next Steps
-1. **Production Video Ingestion Testing:** Submit fresh YouTube URLs across varied formats (interviews, podcasts, educational talks) to verify end-to-end autonomous clipping.
-2. **Batch Processing / Folder Ingestion:** Test the folder-level multi-file ingestion workflow with the native folder explorer.
-3. **Queue & Performance Monitoring:** Monitor Celery task queue concurrency and processing duration under multi-clip workloads.
+1. Commit current verified state as a stable baseline.
+2. Review generated clips in the Studio at `http://localhost:3000/project/709251b2-a7f1-46ac-9952-7467df4d667c`.
+3. Export approved clips to local folder via the Project Export action.
 

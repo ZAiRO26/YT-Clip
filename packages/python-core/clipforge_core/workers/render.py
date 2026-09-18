@@ -55,6 +55,15 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
     Renders all selected clips for a project with manifests and thumbnails.
     """
     logger.info(f"[Render Worker] Starting render pipeline for project {project_id}")
+    session_check = get_sync_session()
+    try:
+        proj_check = session_check.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
+        if not proj_check:
+            logger.warning(f"[Render Worker] Project {project_id} not found in database. Aborting orphaned render task.")
+            return {"error": "Project not found"}
+    finally:
+        session_check.close()
+
     update_job_progress(project_id, stage="render", status="running", percent=0.0, detail="Initializing render pipeline...")
     _update_project_status(project_id, "encoding")
 
@@ -169,9 +178,12 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                 clip_num = len(db_clips) + idx + 1
 
             # Determine focal point for this clip's time range
-            clip_focal_points = [
-                f["focal_x"] for f in focal_timeline
+            clip_timeline = [
+                f for f in focal_timeline
                 if start_s <= f.get("time_sec", 0.0) <= end_s
+            ]
+            clip_focal_points = [
+                f["focal_x"] for f in clip_timeline
             ]
             focal_x = (
                 sum(clip_focal_points) / len(clip_focal_points)
@@ -200,6 +212,7 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                 end_sec=end_s,
                 crop_mode=crop_mode,
                 focal_x=focal_x,
+                focal_timeline=clip_timeline if crop_mode == "stacked_speaker" else None,
                 caption_style=caption_style,
                 transcript_segments=transcript_segments,
                 output_thumbnail_path=out_thumb_path,
@@ -241,14 +254,20 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                         "-map", "1:a:0",
                         "-c:v", "copy",
                         "-c:a", "aac",
-                        "-b:a", "192k",
-                        "-movflags", "+faststart",
+                        "-b:a", "128k",
+                        "-shortest",
                         str(temp_muxed),
                     ]
-                    subprocess.run(mux_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-                    os.replace(temp_muxed, out_video_path)
+                    res = subprocess.run(mux_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+                    if res.returncode == 0 and temp_muxed.exists() and temp_muxed.stat().st_size > 0:
+                        os.replace(temp_muxed, out_video_path)
+                        logger.info(f"[RenderWorker] Successfully mixed background music into clip {clip_num}")
+                    else:
+                        logger.warning(f"[RenderWorker] Music mux failed for clip {clip_num}: {res.stderr.decode('utf-8', errors='ignore')}")
+                        if temp_muxed.exists():
+                            temp_muxed.unlink()
                 except Exception as e:
-                    logger.warning(f"[Render Worker] Failed to mix default background music for clip {clip_num}: {e}")
+                    logger.error(f"[RenderWorker] Failed to mix background music: {e}")
 
             # Build and write Render Manifest
             manifest = build_render_manifest(
@@ -268,6 +287,7 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                 transformation_score=cand.get("transformation_score", 75),
                 transformation_breakdown=cand.get("transformation_breakdown", {}),
                 effect_layers=active_effects,
+                focal_timeline=clip_timeline if crop_mode == "stacked_speaker" else None,
             )
 
             manifest_path = clips_output_dir / f"clip_{clip_num}_manifest.json"

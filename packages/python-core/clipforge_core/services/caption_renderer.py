@@ -23,30 +23,39 @@ def format_ass_timestamp(seconds: float) -> str:
     return f"{hours}:{minutes:02d}:{secs:02d}.{centis:02d}"
 
 
-def get_ass_header(style_preset: str = "bold_karaoke", play_res_x: int = 1080, play_res_y: int = 1920) -> str:
+def get_ass_header(
+    style_preset: str = "bold_karaoke",
+    play_res_x: int = 1080,
+    play_res_y: int = 1920,
+    layout_mode: str = "standard",
+) -> str:
     """Generate ASS script header with styling definitions."""
+    margin_v = 340 if style_preset == "bold_karaoke" else (260 if style_preset == "minimal" else (240 if style_preset == "clean_subtitle" else 200))
+    if layout_mode == "stacked_speaker":
+        margin_v = 140
+
     if style_preset == "bold_karaoke":
-        # Font: Arial/Montserrat, Font size 72, Bold, Yellow highlight, Primary White, Outline Black (width 4)
+        # Font: Arial/Montserrat, Font size 68, Bold, Yellow highlight, Primary White, Outline Black (width 4)
         style_def = (
-            "Style: Default,Arial,68,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,"
-            "-1,0,0,0,100,100,0,0,1,4.5,1,2,60,60,340,1"
+            f"Style: Default,Arial,68,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,"
+            f"-1,0,0,0,100,100,0,0,1,4.5,1,2,60,60,{margin_v},1"
         )
     elif style_preset == "minimal":
         # Minimalist white typography with clean drop shadow
         style_def = (
-            "Style: Default,Arial,52,&H00FFFFFF,&H000000FF,&H00000000,&H60000000,"
-            "0,0,0,0,100,100,0,0,1,2.0,2,2,80,80,260,1"
+            f"Style: Default,Arial,52,&H00FFFFFF,&H000000FF,&H00000000,&H60000000,"
+            f"0,0,0,0,100,100,0,0,1,2.0,2,2,80,80,{margin_v},1"
         )
     elif style_preset == "clean_subtitle":
         # Classic box background subtitle
         style_def = (
-            "Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&HA0000000,"
-            "0,0,0,0,100,100,0,0,3,0,0,2,80,80,240,1"
+            f"Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&HA0000000,"
+            f"0,0,0,0,100,100,0,0,3,0,0,2,80,80,{margin_v},1"
         )
     else:  # none or default fallback
         style_def = (
-            "Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,"
-            "0,0,0,0,100,100,0,0,1,2,0,2,60,60,200,1"
+            f"Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,"
+            f"0,0,0,0,100,100,0,0,1,2,0,2,60,60,{margin_v},1"
         )
 
     header = f"""[Script Info]
@@ -72,6 +81,7 @@ def generate_ass_subtitles(
     output_ass_path: str | Path,
     style_preset: str = "bold_karaoke",
     words_per_line: int = 4,
+    layout_mode: str = "standard",
 ) -> Path:
     """
     Generate an ASS subtitle file tailored to the exact clip time range with word-level karaoke timing.
@@ -81,7 +91,7 @@ def generate_ass_subtitles(
 
     if style_preset == "none":
         # Write empty ASS file
-        out_path.write_text(get_ass_header("none"), encoding="utf-8")
+        out_path.write_text(get_ass_header("none", layout_mode=layout_mode), encoding="utf-8")
         return out_path
 
     # Filter words belonging to [clip_start_sec, clip_end_sec]
@@ -149,6 +159,6 @@ def generate_ass_subtitles(
         events.append(f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{ass_text}")
         i += words_per_line
 
-    full_ass = get_ass_header(style_preset) + "\n".join(events) + "\n"
+    full_ass = get_ass_header(style_preset, layout_mode=layout_mode) + "\n".join(events) + "\n"
     out_path.write_text(full_ass, encoding="utf-8")
     return out_path

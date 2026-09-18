@@ -22,9 +22,9 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # --- LLM Gateway (OmniRoute / FreeLLMAPI) ---
-    LLM_BASE_URL: str = "http://localhost:8080/v1"
-    LLM_API_KEY: str = "not-needed"
-    LLM_MODEL: str = "auto"
+    LLM_BASE_URL: str = "http://localhost:20128/v1"
+    LLM_API_KEY: str = "sk-9a7199d557c449a3-b0855a-811b5e80"
+    LLM_MODEL: str = "auto/best-reasoning"
 
     # --- Cloudflare R2 (S3-compatible storage) ---
     R2_ENDPOINT_URL: str = ""

@@ -87,7 +87,7 @@
       "properties": {
         "mode": {
           "type": "string",
-          "enum": ["center", "face_track", "manual", "blur_background"],
+          "enum": ["center", "face_track", "manual", "blur_background", "stacked_speaker"],
           "default": "center"
         },
         "keyframes": {
@@ -109,6 +109,16 @@
           "type": "boolean",
           "default": true,
           "description": "Reserve space for platform-safe caption/text areas."
+        },
+        "layout_bands": {
+          "type": "object",
+          "description": "Bands configuration for stacked layouts.",
+          "properties": {
+            "top_height": { "type": "integer" },
+            "divider_height": { "type": "integer" },
+            "bottom_height": { "type": "integer" },
+            "tracking": { "type": "string" }
+          }
         }
       }
     },

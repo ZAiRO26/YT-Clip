@@ -14,12 +14,13 @@ powershell -NoProfile -Command "8000, 3000 | ForEach-Object { $p = (Get-NetTCPCo
 echo [2/3] Terminating Celery Workers and background runners...
 powershell -NoProfile -Command "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*celery*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
 
-echo [3/3] Checking Docker Infrastructure...
+echo [3/3] Stopping Redis (Native)...
 if "%1"=="--all" (
-    echo Stopping Docker containers (Postgres, Redis, MinIO)...
-    docker compose -f infra/docker-compose.yml stop
+    echo Stopping Redis server...
+    powershell -NoProfile -Command "Get-Process redis-server -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue"
+    echo (PostgreSQL left running as a Windows service. Stop via: net stop postgresql-x64-16)
 ) else (
-    echo (Docker containers kept running in background for fast re-launch. Pass '--all' to stop Docker as well).
+    echo (Redis and PostgreSQL kept running for fast re-launch. Pass '--all' to stop Redis as well).
 )
 
 echo.

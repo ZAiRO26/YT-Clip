@@ -61,8 +61,28 @@ export default function ClipEditorPage() {
         setClip(found);
         setStartSec(found.start_sec);
         setEndSec(found.end_sec);
+        if (found.render_manifest?.crop?.mode) {
+          setCropMode(found.render_manifest.crop.mode);
+        }
+        if (found.render_manifest?.captions?.preset) {
+          setCaptionStyle(found.render_manifest.captions.preset);
+        }
         if (found.render_manifest?.music_track) {
           setMusicTrack(found.render_manifest.music_track);
+        } else if (found.render_manifest?.audio?.music_track) {
+          setMusicTrack(found.render_manifest.audio.music_track);
+        }
+        if (found.render_manifest?.editorial?.narration_script) {
+          setVoiceoverText(found.render_manifest.editorial.narration_script);
+        }
+        if (found.render_manifest?.audio?.voice_id) {
+          setVoiceId(found.render_manifest.audio.voice_id);
+        }
+        if (found.render_manifest?.audio?.voiceover_start_offset_sec !== undefined) {
+          setVoiceoverStartOffsetSec(found.render_manifest.audio.voiceover_start_offset_sec);
+        }
+        if (found.render_manifest?.effects?.layers && Array.isArray(found.render_manifest.effects.layers)) {
+          setSelectedEffects(found.render_manifest.effects.layers.map((l: any) => l.type || l.id));
         }
       }
 
@@ -78,7 +98,7 @@ export default function ClipEditorPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectId, clipId]);
+  }, [projectId, clipId, apiBase]);
 
   useEffect(() => {
     fetchClip();
@@ -97,6 +117,10 @@ export default function ClipEditorPage() {
         body: JSON.stringify({
           start_sec: startSec,
           end_sec: endSec,
+          voiceover_text: voiceoverText,
+          voice_id: voiceId,
+          crop_mode: cropMode,
+          music_track: musicTrack,
         }),
       });
       if (!res.ok) {
@@ -126,7 +150,7 @@ export default function ClipEditorPage() {
     try {
       setGeneratingScript(true);
       setScriptStyle(style);
-      const res = await api.generateVoiceoverScript(clipId, style);
+      const res = await api.generateVoiceoverScript(clipId, style, voiceId);
       setVoiceoverText(res.script);
       setVoiceoverStartOffsetSec(res.start_offset_sec);
       if ((res as any).audio_preview_url) {
@@ -177,6 +201,7 @@ export default function ClipEditorPage() {
       toast.success("Clip re-rendered successfully!");
       setVideoVersion(Date.now());
       setClip((prev) => prev ? { ...prev, file_url: data.file_url, transformation_score: data.transformation_score } : null);
+      await fetchClip();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Re-render failed");
     } finally {
@@ -297,8 +322,48 @@ export default function ClipEditorPage() {
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
         {/* Left / Center: Video Player */}
         <div className="lg:col-span-7 bg-zinc-950 flex items-center justify-center p-6 relative overflow-hidden border-r border-border">
+          {/* Active Features Status Badges */}
+          <div className="absolute top-4 left-6 right-6 flex items-center justify-between pointer-events-none z-10">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] font-medium bg-black/80 backdrop-blur border border-white/10 px-2 py-0.5 rounded-full text-foreground flex items-center gap-1">
+                {cropMode === "stacked_speaker" ? "📺 Stacked Context" : cropMode === "blur_background" ? "🌫️ Blurred BG" : cropMode === "center" ? "📐 Center Crop" : "👤 Face Track 9:16"}
+              </span>
+              <span className="text-[10px] font-medium bg-black/80 backdrop-blur border border-white/10 px-2 py-0.5 rounded-full text-foreground flex items-center gap-1">
+                {captionStyle === "none" ? "🚫 No Captions" : `💬 ${captionStyle.replace("_", " ")}`}
+              </span>
+              {voiceoverText.trim() ? (
+                <span className="text-[10px] font-semibold bg-emerald-950/85 backdrop-blur border border-emerald-500/40 px-2 py-0.5 rounded-full text-emerald-300 flex items-center gap-1 shadow-sm">
+                  🎙️ VO: {voiceId.replace("af_", "").replace("am_", "").replace("bf_", "").replace("bm_", "")}
+                </span>
+              ) : (
+                <span className="text-[10px] font-medium bg-black/70 backdrop-blur border border-white/10 px-2 py-0.5 rounded-full text-cf-muted">
+                  🎙️ No Voiceover
+                </span>
+              )}
+              {musicTrack && musicTrack !== "none" ? (
+                <span className="text-[10px] font-semibold bg-indigo-950/85 backdrop-blur border border-indigo-500/40 px-2 py-0.5 rounded-full text-indigo-300 flex items-center gap-1 shadow-sm">
+                  🎵 {musicTrack.replace("_", " ")}
+                </span>
+              ) : (
+                <span className="text-[10px] font-medium bg-black/70 backdrop-blur border border-white/10 px-2 py-0.5 rounded-full text-cf-muted">
+                  🎵 No Music
+                </span>
+              )}
+              {selectedEffects.length > 0 && (
+                <span className="text-[10px] font-semibold bg-amber-950/85 backdrop-blur border border-amber-500/40 px-2 py-0.5 rounded-full text-amber-300 flex items-center gap-1 shadow-sm">
+                  ✨ {selectedEffects.length} {selectedEffects.length === 1 ? "Effect" : "Effects"}
+                </span>
+              )}
+            </div>
+            {clip?.transformation_score && (
+              <span className="text-[10px] font-bold bg-primary/20 backdrop-blur border border-primary/40 px-2.5 py-0.5 rounded-full text-primary">
+                Score: {clip.transformation_score}/100
+              </span>
+            )}
+          </div>
+
           {viewMode === "preview" ? (
-            <div className="h-full max-h-[750px] aspect-[9/16] bg-black rounded-2xl overflow-hidden shadow-2xl border border-white/10 relative">
+            <div className="h-full max-h-[750px] aspect-[9/16] bg-black rounded-2xl overflow-hidden shadow-2xl border border-white/10 relative mt-6">
               {videoUrl ? (
                 <video key={videoVersion} src={videoUrl} controls autoPlay className="w-full h-full object-cover" />
               ) : (
@@ -360,11 +425,12 @@ export default function ClipEditorPage() {
           {/* Section 2: Layout & Framing */}
           <section className="space-y-3">
             <h3 className="text-xs font-bold text-primary uppercase tracking-wider">2. Layout &amp; Crop</h3>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {[
                 { id: "face_track", label: "Face Track 9:16" },
                 { id: "blur_background", label: "Blurred BG" },
                 { id: "center", label: "Center Crop" },
+                { id: "stacked_speaker", label: "📺 Stacked Context" },
               ].map((m) => (
                 <button
                   key={m.id}
@@ -533,8 +599,15 @@ export default function ClipEditorPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            const audio = new Audio(`http://localhost:8000/${audioPreviewUrl}?t=${Date.now()}`);
-                            audio.play();
+                            const cleanPath = audioPreviewUrl.replace(/^\/+/, "");
+                            const fullUrl = audioPreviewUrl.startsWith("http")
+                              ? audioPreviewUrl
+                              : `${apiBase}/${cleanPath}`;
+                            const audio = new Audio(`${fullUrl}?t=${Date.now()}`);
+                            audio.play().catch((err) => {
+                              console.error("Audio preview playback failed:", err);
+                              toast.error("Playback error: click to retry");
+                            });
                             toast.success("Playing Kokoro audio preview...");
                           }}
                           className="bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 transition"

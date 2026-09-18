@@ -245,6 +245,14 @@ def download_source(self, project_id: str, source_type: str, source_value: str) 
     Queue: ingest (aliases: download)
     """
     logger.info(f"[Ingest] Starting for project {project_id}: {source_type} = {source_value}")
+    session_check = get_sync_session()
+    try:
+        proj_check = session_check.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
+        if not proj_check:
+            logger.warning(f"[Ingest] Project {project_id} not found in database. Aborting orphaned ingest task.")
+            return {"error": "Project not found"}
+    finally:
+        session_check.close()
 
     update_job_progress(project_id, stage="download", status="running", detail="Starting ingest...")
     _update_project_status(project_id, "downloading")
@@ -253,7 +261,15 @@ def download_source(self, project_id: str, source_type: str, source_value: str) 
     output_path = project_dir / "source.mp4"
 
     try:
-        if source_type == "youtube_url":
+        if output_path.exists() and output_path.stat().st_size > 1024 * 1024:
+            logger.info(f"[Ingest] Found existing source.mp4 ({output_path.stat().st_size / (1024 * 1024):.2f} MB), skipping re-download.")
+            metadata = {
+                "title": output_path.stem,
+                "source_file": str(output_path),
+                "file_size_mb": round(output_path.stat().st_size / (1024 * 1024), 2),
+            }
+            source_url = source_value if source_type == "youtube_url" else None
+        elif source_type == "youtube_url":
             metadata = _download_youtube(source_value, output_path, project_id)
             source_url = source_value
         elif source_type in ("local_folder", "upload"):

@@ -409,6 +409,29 @@ async def update_clip(
     if data.reasoning is not None:
         clip.reasoning = data.reasoning
 
+    # Persist editorial voiceover and audio settings in manifest
+    if any(x is not None for x in [data.voiceover_text, data.voice_id, data.crop_mode, data.music_track]):
+        manifest = dict(clip.render_manifest or {})
+        if data.voiceover_text is not None:
+            if "editorial" not in manifest or not isinstance(manifest["editorial"], dict):
+                manifest["editorial"] = {}
+            manifest["editorial"]["narration_script"] = data.voiceover_text.strip() or None
+            manifest["editorial"]["narration_status"] = "drafted" if data.voiceover_text.strip() else "none"
+        if data.voice_id is not None:
+            if "audio" not in manifest or not isinstance(manifest["audio"], dict):
+                manifest["audio"] = {}
+            manifest["audio"]["voice_id"] = data.voice_id
+        if data.music_track is not None:
+            manifest["music_track"] = data.music_track
+            if "audio" not in manifest or not isinstance(manifest["audio"], dict):
+                manifest["audio"] = {}
+            manifest["audio"]["music_track"] = data.music_track
+        if data.crop_mode is not None:
+            if "crop" not in manifest or not isinstance(manifest["crop"], dict):
+                manifest["crop"] = {}
+            manifest["crop"]["mode"] = data.crop_mode
+        clip.render_manifest = manifest
+
     await session.commit()
     await session.refresh(clip)
 
@@ -921,32 +944,33 @@ async def rerender_single_clip(
     analysis_file = project_dir / "analysis.json"
     segments = []
     focal_x = 0.5
+    clip_timeline = None
 
-    if "focal_x" in payload and payload["focal_x"] is not None:
-        focal_x = float(payload["focal_x"])
-    elif crop_mode == "face_track" and analysis_file.exists():
+    if analysis_file.exists():
         try:
             import json
             analysis_data = json.loads(analysis_file.read_text(encoding="utf-8"))
             segments = analysis_data.get("transcript", {}).get("segments", [])
             focal_timeline = analysis_data.get("face_tracking", {}).get("timeline", [])
-            clip_pts = [
-                f["focal_x"] for f in focal_timeline
-                if start_sec <= f.get("time_sec", 0.0) <= end_sec
-            ]
-            if clip_pts:
-                focal_x = sum(clip_pts) / len(clip_pts)
-            else:
-                focal_x = float(analysis_data.get("face_tracking", {}).get("average_focal_x", 0.5))
+            if crop_mode in ["face_track", "stacked_speaker"]:
+                clip_pts = [
+                    f["focal_x"] for f in focal_timeline
+                    if start_sec <= f.get("time_sec", 0.0) <= end_sec
+                ]
+                if clip_pts:
+                    focal_x = sum(clip_pts) / len(clip_pts)
+                else:
+                    focal_x = float(analysis_data.get("face_tracking", {}).get("average_focal_x", 0.5))
+                if crop_mode == "stacked_speaker":
+                    clip_timeline = [
+                        f for f in focal_timeline
+                        if start_sec <= f.get("time_sec", 0.0) <= end_sec
+                    ]
         except Exception:
             focal_x = 0.5
-    elif analysis_file.exists():
-        try:
-            import json
-            analysis_data = json.loads(analysis_file.read_text(encoding="utf-8"))
-            segments = analysis_data.get("transcript", {}).get("segments", [])
-        except Exception:
-            segments = []
+
+    if "focal_x" in payload and payload["focal_x"] is not None:
+        focal_x = float(payload["focal_x"])
 
     # Filter effects to active and verified effects (All 6 verified: film_grain, vignette, zoom, camera_shake, rgb_split, vhs_noise)
     active_effects = []
@@ -998,6 +1022,7 @@ async def rerender_single_clip(
         caption_style=caption_style,
         transcript_segments=segments,
         output_thumbnail_path=out_thumb_path,
+        focal_timeline=clip_timeline if crop_mode == "stacked_speaker" else None,
     )
 
     # Apply motion effects post-render if requested
@@ -1081,9 +1106,22 @@ async def rerender_single_clip(
         effect_layers=active_effects,
         audio_mode="mix" if (vo_path or bg_music_path) else "original_only",
         voiceover_asset_id=vo_asset_id,
+        focal_timeline=clip_timeline if crop_mode == "stacked_speaker" else None,
     )
+    if vo_path and voiceover_text:
+        manifest["editorial"]["narration_script"] = voiceover_text.strip()
+        manifest["editorial"]["narration_status"] = "approved"
+        vo_style = payload.get("voiceover_style")
+        if vo_style == "hook_intro":
+            manifest["editorial"]["hook_text"] = voiceover_text.strip()
+        elif vo_style == "outro_cta":
+            manifest["editorial"]["cta_text"] = voiceover_text.strip()
+        manifest["audio"]["voice_id"] = voice_id
+        manifest["audio"]["voiceover_start_offset_sec"] = vo_offset
+        manifest["audio"]["voiceover_duration_sec"] = actual_vo_duration
     if music_track and music_track != "none":
         manifest["music_track"] = music_track
+        manifest["audio"]["music_track"] = music_track
     manifest_path = clips_dir / f"clip_{clip.id}_manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
@@ -1142,13 +1180,24 @@ async def retry_project_stage(
         await session.commit()
 
     if stage in ("select", "llm"):
+        from celery import chain as celery_chain
+        from clipforge_core.workers.render import render_project_clips
         from clipforge_core.workers.select import select_clips
-        select_clips.delay(
-            project_id=project_id,
-            clip_count=project.clip_count or 5,
-            min_length_sec=project.min_length_sec or 20,
-            max_length_sec=project.max_length_sec or 60,
+        select_chain = celery_chain(
+            select_clips.si(
+                project_id=project_id,
+                clip_count=project.clip_count or 5,
+                min_length_sec=project.min_length_sec or 20,
+                max_length_sec=project.max_length_sec or 60,
+                custom_prompt=None,
+                time_range_start=project.time_range_start,
+                time_range_end=project.time_range_end,
+                temporal_distribution=getattr(project, "temporal_distribution", "even_spread") or "even_spread",
+                content_focus=getattr(project, "content_focus", "balanced") or "balanced",
+            ),
+            render_project_clips.si(project_id=project_id),
         )
+        select_chain.apply_async()
     elif stage in ("render", "crop", "caption"):
         from clipforge_core.workers.render import render_project_clips
         render_project_clips.delay(project_id=project_id)
@@ -1281,6 +1330,15 @@ async def get_clip_voiceover_context(
     }
 
 
+@router.get("/voice-personas")
+async def get_voice_personas():
+    """
+    Return the catalog of available Kokoro TTS voice personas.
+    """
+    from clipforge_core.services.tts_service import VOICE_PERSONAS
+    return VOICE_PERSONAS
+
+
 @router.post("/clips/{clip_id}/generate-voiceover-script")
 async def generate_clip_voiceover_script(
     clip_id: str,
@@ -1332,7 +1390,11 @@ async def generate_clip_voiceover_script(
     duration = clip.end_sec - clip.start_sec
     clip_title = (clip.render_manifest or {}).get("title") or (clip.project.title if clip.project else "Highlight")
 
-    preview_audio_file = project_dir / "clips" / f"vo_preview_{clip.id}.wav"
+    voice_id = payload.get("voice_id", "af_bella")
+    clips_dir = project_dir / "clips"
+    clips_dir.mkdir(parents=True, exist_ok=True)
+    preview_audio_file = clips_dir / f"preview_voiceover_{clip_id}_{style}_{voice_id}.wav"
+
     from clipforge_core.services.script_generator import generate_voiceover_script
     script_data = await generate_voiceover_script(
         clip_title=clip_title,
@@ -1342,6 +1404,7 @@ async def generate_clip_voiceover_script(
         clip_start_sec=clip.start_sec,
         transcript_segments=all_segments,
         output_audio_path=preview_audio_file,
+        voice_id=voice_id,
     )
     if preview_audio_file.exists():
         script_data["audio_preview_url"] = f"media/{project.id}/clips/{preview_audio_file.name}"

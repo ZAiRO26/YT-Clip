@@ -59,6 +59,15 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
       3. Face/subject tracking
     """
     logger.info(f"[Analysis] Starting unified analysis for project {project_id}")
+    session_check = get_sync_session()
+    try:
+        proj_check = session_check.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
+        if not proj_check:
+            logger.warning(f"[Analysis] Project {project_id} not found in database. Aborting orphaned analysis task.")
+            return {"error": "Project not found"}
+    finally:
+        session_check.close()
+
     update_job_progress(project_id, stage="analysis", status="running", percent=5.0, detail="Loading Whisper transcription model...", force_write=True)
     _update_project_status(project_id, "transcribing")
 
@@ -73,6 +82,18 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
         raise FileNotFoundError(error_msg)
 
     try:
+        # Step 0: Check if full analysis.json already exists and is valid
+        analysis_file = project_dir / "analysis.json"
+        if analysis_file.exists():
+            try:
+                cached_analysis = json.loads(analysis_file.read_text(encoding="utf-8"))
+                if cached_analysis.get("transcript") and "scenes" in cached_analysis:
+                    logger.info(f"[Analysis] Reusing fully completed analysis.json for project {project_id}")
+                    update_job_progress(project_id, stage="analysis", status="success", percent=100.0, detail="Reused cached analysis.", force_write=True)
+                    return cached_analysis
+            except Exception as e:
+                logger.warning(f"[Analysis] Cached analysis.json could not be parsed: {e}")
+
         # Step 1: Faster-Whisper Transcription (or load existing cached transcript)
         transcript_file = project_dir / "transcript.json"
         if transcript_file.exists():
@@ -85,9 +106,20 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
 
         # Step 2: Scene Detection with graceful fallback
         update_job_progress(project_id, stage="analysis", percent=62.0, detail="Detecting scene cuts & visual boundaries...", force_write=True)
+
+        def on_scene_progress(scene_pct: float, detail_msg: str):
+            # Maps scene detection 0-100% into 62% - 75% of analysis stage
+            overall_pct = 62.0 + (scene_pct / 100.0) * 13.0
+            update_job_progress(
+                project_id,
+                stage="analysis",
+                percent=round(overall_pct, 1),
+                detail=detail_msg,
+            )
+
         try:
             logger.info(f"[Analysis] Detecting scenes for project {project_id}")
-            scenes = detect_scenes(video_file)
+            scenes = detect_scenes(video_file, progress_callback=on_scene_progress)
             update_job_progress(project_id, stage="analysis", percent=75.0, detail=f"Detected {len(scenes)} visual scene cuts.", force_write=True)
         except Exception as e:
             logger.warning(f"[Analysis] Scene detection warning: {e}. Defaulting to continuous scene.")
@@ -104,6 +136,18 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
         # Step 3: Face & Subject Tracking with active speaker detection
         update_job_progress(project_id, stage="analysis", percent=77.0, detail="Analyzing face & active speaker tracking...", force_write=True)
 
+        # Determine tracking_mode based on project crop_mode
+        tracking_mode = "standard"
+        session_proj = get_sync_session()
+        try:
+            proj = session_proj.query(Project).filter(Project.id == uuid.UUID(project_id)).first()
+            if proj and getattr(proj, "crop_mode", None) == "stacked_speaker":
+                tracking_mode = "enhanced"
+        except Exception as e:
+            logger.warning(f"[Analysis] Could not read project crop_mode for {project_id}: {e}")
+        finally:
+            session_proj.close()
+
         def on_face_progress(face_pct: float, detail_msg: str):
             # Maps face tracking 0-100% into 77% - 94% of analysis stage
             overall_pct = 77.0 + (face_pct / 100.0) * 17.0
@@ -115,8 +159,13 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
             )
 
         try:
-            logger.info(f"[Analysis] Tracking face coordinates for project {project_id}")
-            face_data = track_faces(video_file, transcript=transcript, progress_callback=on_face_progress)
+            logger.info(f"[Analysis] Tracking face coordinates for project {project_id} (mode={tracking_mode})")
+            face_data = track_faces(
+                video_file,
+                transcript=transcript,
+                progress_callback=on_face_progress,
+                tracking_mode=tracking_mode,
+            )
             update_job_progress(project_id, stage="analysis", percent=95.0, detail="Face tracking complete. Consolidating timeline...", force_write=True)
         except Exception as e:
             logger.warning(f"[Analysis] Face tracking warning: {e}. Defaulting to center-crop.")

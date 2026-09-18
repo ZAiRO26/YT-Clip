@@ -17,17 +17,17 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     DEBUG: bool = True
 
-    # --- Database (Postgres on port 5433) ---
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@127.0.0.1:5433/clipforge"
-    DATABASE_URL_SYNC: str = "postgresql+psycopg2://postgres:postgres@127.0.0.1:5433/clipforge"
+    # --- Database (Postgres on port 5432) ---
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:password@127.0.0.1:5432/clipforge"
+    DATABASE_URL_SYNC: str = "postgresql+psycopg2://postgres:password@127.0.0.1:5432/clipforge"
 
     # --- Redis (Celery broker + result backend) ---
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # --- LLM Gateway (OmniRoute / FreeLLMAPI) ---
-    LLM_BASE_URL: str = "http://localhost:8080/v1"
-    LLM_API_KEY: str = "not-needed"
-    LLM_MODEL: str = "auto"
+    LLM_BASE_URL: str = "http://localhost:20128/v1"
+    LLM_API_KEY: str = "sk-9a7199d557c449a3-b0855a-811b5e80"
+    LLM_MODEL: str = "auto/best-reasoning"
 
     # --- Cloudflare R2 (S3-compatible storage) ---
     R2_ENDPOINT_URL: str = ""

@@ -61,11 +61,15 @@ def update_job_progress(
         for job in jobs:
             if status:
                 job.status = status
-                if status == "running" and not job.started_at:
-                    job.started_at = datetime.now(timezone.utc)
+                if status == "running":
+                    job.error_message = None
+                    if not job.started_at:
+                        job.started_at = datetime.now(timezone.utc)
                 if status in ("success", "failed"):
                     job.completed_at = datetime.now(timezone.utc)
-            
+                if status == "success":
+                    job.error_message = None
+
             if percent is not None:
                 job.progress_percent = float(percent)
             if detail is not None:

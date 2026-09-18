@@ -575,11 +575,12 @@ export default function NewProjectPage() {
             {/* 4A: Layout & Crop */}
             <div className="space-y-2">
               <label className="text-xs font-semibold text-cf-muted block">Framing &amp; Aspect Ratio</label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {[
                   { id: "face_track", label: "👤 Face Track 9:16", desc: "Auto-centers speaker" },
                   { id: "blur_background", label: "🌁 Blurred BG", desc: "Ambient side-blur" },
                   { id: "center", label: "🔲 Center Crop", desc: "Fixed center 9:16" },
+                  { id: "stacked_speaker", label: "📺 Stacked Context", desc: "Wide shot + speaker zoom" },
                 ].map((m) => (
                   <button
                     key={m.id}

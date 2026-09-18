@@ -107,6 +107,7 @@ async def generate_voiceover_script(
     transcript_segments: List[Dict[str, Any]] | None = None,
     speaking_rate_wps: float = 2.8,
     output_audio_path: str | Path | None = None,
+    voice_id: str = "af_bella",
 ) -> Dict[str, Any]:
     """
     Generate an AI voiceover script tailored to a clip and style.
@@ -242,11 +243,13 @@ Return a JSON object:
     try:
         from clipforge_core.services.tts_service import get_kokoro_engine, resolve_voice_id
         kokoro = get_kokoro_engine()
+        resolved_voice = resolve_voice_id(voice_id)
+        lang = "en-gb" if resolved_voice.startswith("b") else "en-us"
         samples, sr = kokoro.create(
             text=final_script,
-            voice=resolve_voice_id("af_bella"),
+            voice=resolved_voice,
             speed=1.0,
-            lang="en-us",
+            lang=lang,
         )
         actual_audio_duration = round(len(samples) / float(sr), 2)
         if output_audio_path:

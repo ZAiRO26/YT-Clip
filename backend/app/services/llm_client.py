@@ -55,42 +55,38 @@ class LLMClient:
         base_url: str | None = None,
         api_key: str | None = None,
         model: str | None = None,
-        timeout: float = 120.0,
+        timeout: float = 300.0,
         max_retries: int = 3,
     ):
-        self._default_base_url = (base_url or settings.LLM_BASE_URL).rstrip("/")
-        self._default_api_key = api_key or settings.LLM_API_KEY
-        self._default_model = model or settings.LLM_MODEL
+        self._default_base_url = (base_url or settings.LLM_BASE_URL or "http://localhost:20128/v1").rstrip("/")
+        self._default_api_key = api_key or settings.LLM_API_KEY or "sk-9a7199d557c449a3-b0855a-811b5e80"
+        self._default_model = model or settings.LLM_MODEL or "auto/best-reasoning"
         self.timeout = timeout
         self.max_retries = max_retries
 
-    async def _get_dynamic_settings(self):
+    def _get_dynamic_settings(self) -> tuple[str, str, str]:
         """Fetch latest settings from DB or use defaults."""
-        from app.database import async_session_factory
+        from app.database import get_sync_session
         from sqlalchemy import text
         
         try:
-            async with async_session_factory() as session:
+            session = get_sync_session()
+            try:
                 # Check if table exists
-                res = await session.execute(text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'settings')"))
+                res = session.execute(text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'settings')"))
                 if not res.scalar():
                     return self._default_base_url, self._default_api_key, self._default_model
                 
-                # Fetch
-                base_url = await session.execute(text("SELECT value FROM settings WHERE key = 'llm_base_url'"))
-                base_url = base_url.scalar()
-                
-                api_key = await session.execute(text("SELECT value FROM settings WHERE key = 'llm_api_key'"))
-                api_key = api_key.scalar()
-                
-                model = await session.execute(text("SELECT value FROM settings WHERE key = 'llm_model'"))
-                model = model.scalar()
-                
-                return (
-                    base_url.strip('"') if base_url else self._default_base_url,
-                    api_key.strip('"') if api_key else self._default_api_key,
-                    model.strip('"') if model else self._default_model
-                )
+                rows = session.execute(text("SELECT key, value FROM settings")).fetchall()
+                settings_map = {row[0]: row[1].strip('"') for row in rows if row[1]}
+
+                base_url = (settings_map.get("llm_base_url") or self._default_base_url).rstrip("/")
+                api_key = settings_map.get("llm_api_key") or self._default_api_key
+                model = settings_map.get("llm_model") or self._default_model
+
+                return base_url, api_key, model
+            finally:
+                session.close()
         except Exception as e:
             logger.warning(f"Failed to fetch dynamic settings, using defaults: {e}")
             return self._default_base_url, self._default_api_key, self._default_model
@@ -194,7 +190,7 @@ class LLMClient:
         response_format: dict | None = None,
     ) -> str:
         """Internal method to make the actual API call with retry logic."""
-        base_url, api_key, model = await self._get_dynamic_settings()
+        base_url, api_key, model = self._get_dynamic_settings()
         
         payload: dict[str, Any] = {
             "model": model,
@@ -248,7 +244,7 @@ class LLMClient:
 
     async def health_check(self) -> dict[str, Any]:
         """Check if the LLM gateway is reachable and responding."""
-        base_url, api_key, model = await self._get_dynamic_settings()
+        base_url, api_key, model = self._get_dynamic_settings()
         
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:

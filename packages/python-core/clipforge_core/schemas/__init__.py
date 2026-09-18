@@ -109,7 +109,7 @@ class ProjectCreate(BaseModel):
     min_length_sec: int = Field(default=20, ge=5, le=300)
     max_length_sec: int = Field(default=60, ge=10, le=600)
     aspect_ratio: str = Field(default="9:16", pattern="^(9:16|1:1|16:9)$")
-    crop_mode: str = Field(default="face_track", description="Framing mode: face_track, blur_background, center")
+    crop_mode: str = Field(default="face_track", pattern="^(face_track|blur_background|center|stacked_speaker)$", description="Framing mode: face_track, blur_background, center, stacked_speaker")
     caption_style: str = Field(default="bold_karaoke", description="Caption typography preset")
     default_effects: list[dict[str, Any]] = Field(default_factory=list, description="Default motion effect layers")
     default_voice_id: str = Field(default="af_bella", description="Default Kokoro voice persona")
@@ -210,6 +210,10 @@ class ClipUpdate(BaseModel):
     start_sec: float | None = None
     end_sec: float | None = None
     reasoning: str | None = None
+    voiceover_text: str | None = None
+    voice_id: str | None = None
+    crop_mode: str | None = None
+    music_track: str | None = None
 
 
 class ReclipRequest(BaseModel):
@@ -306,7 +310,7 @@ class ClipRerenderRequest(BaseModel):
     start_sec: float = Field(..., ge=0.0)
     end_sec: float = Field(..., ge=1.0)
     caption_style: str = Field(default="bold_karaoke", pattern="^(bold_karaoke|minimal|clean_subtitle|none)$")
-    crop_mode: str = Field(default="face_track", pattern="^(face_track|blur_background|center)$")
+    crop_mode: str = Field(default="face_track", pattern="^(face_track|blur_background|center|stacked_speaker)$")
     focal_x: float = Field(default=0.5, ge=0.0, le=1.0)
     voiceover_text: str | None = None
     voice_id: str | None = None
