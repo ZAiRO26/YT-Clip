@@ -527,3 +527,21 @@
         - [x] OmniRoute LLM gateway partitioned the 53-minute timeline via Dynamic Temporal Binning, extracting 20 high-scoring candidate moments (scores: 82–89/100).
         - [x] FFmpeg Render Engine generated all 20 vertical 9:16 MP4s (`clip_1.mp4` to `clip_20.mp4`), ASS yellow bounce karaoke subtitles, ambient audio ducking, and draft-07 manifests.
         - [x] All 20 clips rendered, verified on disk (`media/709251b2-a7f1-46ac-9952-7467df4d667c/clips/`), and available in the Studio UI.
+
+ 51. **Session 32 (1-Click Launcher Audit & Robustness Hardening):**
+     - **Launcher Audit & Bug Fixes (`start.bat` & `stop.bat`):**
+        - [x] Audited `start.bat` from scratch without touching any product code.
+        - [x] Fixed critical CMD quote-escaping bug: replaced `cmd /k "cd /d \"%~dp0\" && ..."` with `/D "%ROOT%"` working directory argument, eliminating the `"The filename, directory name, or volume label syntax is incorrect"` error on double-click.
+        - [x] Replaced fragile PowerShell inline loops with zero-error pipelines (`Get-NetTCPConnection ... | Stop-Process` and WMI WQL `CommandLine LIKE '%celery%'` termination).
+        - [x] Added dynamic Redis WinGet path discovery fallback and ensured PostgreSQL service check uses `sc.exe`.
+        - [x] Added OmniRoute LLM gateway check on port 20128.
+        - [x] Fully verified `start.bat` execution with all 7 startup stages running smoothly with 1 click.
+
+ 52. **Session 33 (Documentation & Licensing Overhaul):**
+     - **Product Documentation:**
+        - [x] Created `DOC/Product_Overview.md` detailing the 6 AI engines (Whisper, MediaPipe FaceMesh, PySceneDetect, OmniRoute LLM, Kokoro TTS, FFmpeg DSP), addressing the "what is the issue, what is the solution" requirement.
+     - **Licensing Blockade (BSL 1.1):**
+        - [x] Analyzed MIT license vulnerabilities regarding commercial SaaS exploitation.
+        - [x] Adopted the Business Source License 1.1 (BSL-1.1) to block commercial production and SaaS usage without a paid commercial license.
+        - [x] Updated `LICENSE` file with MariaDB BSL 1.1 text, setting 4-year Change Date (2030-10-01) converting to MIT.
+        - [x] Updated `README.md` to display red BSL 1.1 badge and clear plain-English commercial restrictions.

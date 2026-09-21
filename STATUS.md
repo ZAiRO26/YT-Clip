@@ -287,25 +287,19 @@
 - **Phase 9 (Testing & Reliability):** [x] Completed
 - **Phase 10 (Scale Readiness):** [x] Completed
 
-## Newly Created & Modified Files (Session 31 — Latent S2 EP7 20-Clip Ingestion)
-- `PROGRESS.md`: Documented project `709251b2-a7f1-46ac-9952-7467df4d667c` creation and pipeline kickoff.
-- `STATUS.md`: Updated active processing state.
+## Newly Created & Modified Files (Session 33 — Documentation & Licensing)
+- `DOC/Product_Overview.md`: Created comprehensive end-to-end product documentation.
+- `LICENSE`: Switched from MIT to Business Source License (BSL 1.1) to block commercial SaaS freeloading.
+- `README.md`: Updated license badges and text to reflect BSL 1.1 terms.
+- `PROGRESS.md` / `STATUS.md`: Updated with licensing session notes.
 
 ## Current State & Achievements
-- **20-Clip Generation Complete:** Project `709251b2-a7f1-46ac-9952-7467df4d667c` (*India's Got Latent S2 EP7 - 20 Best Shorts*, 53 min / 3207s) successfully processed from YouTube URL to 20 rendered vertical 9:16 shorts.
-- **Configured Settings Verified:**
-  * Target: 20 clips (20s–60s duration).
-  * Framing: `📺 Stacked Context` (`stacked_speaker` mode: 16:9 context top + speaker zoom bottom).
-  * Subtitles: `⚡ Bold Karaoke` (`bold_karaoke` yellow active-word bounce pop).
-  * Music Bed: `🧘 Ambient Focus` with -12dB dynamic sidechain ducking.
-  * Selection Strategy: `🎭 Balanced Mix` with `🌐 Dynamic Temporal Binning`.
-  * Rights: `written_permission` ("Open license to cut shorts on this video").
-- **Pipeline Stages:** All 5 stages marked `success` 100% (Download, Transcribe, Select, Crop, Caption).
-- **Disk Outputs:** 20 rendered MP4s (`clip_1.mp4`–`clip_20.mp4`), ASS karaoke subtitle files, thumbnails, and Draft-07 manifests saved in `media/709251b2-a7f1-46ac-9952-7467df4d667c/clips/`.
-- **Infrastructure:** 100% native Windows services running (Postgres 16 on 5432, Redis 8.8.0 on 6379, FastAPI on 8000, Next.js on 3000, Celery, OmniRoute on 20128). Docker completely decommissioned.
+- **Licensing Blockade Active:** Project is now protected by BSL-1.1, allowing free personal/educational use but requiring a commercial license for SaaS deployment.
+- **Product Documentation:** `DOC/Product_Overview.md` successfully drafted detailing the 6 AI engines.
 
 ## Immediate Next Steps
-1. Commit current verified state as a stable baseline.
+1. Double-click `start.bat` to launch all 5 service windows and open the Web Studio.
 2. Review generated clips in the Studio at `http://localhost:3000/project/709251b2-a7f1-46ac-9952-7467df4d667c`.
 3. Export approved clips to local folder via the Project Export action.
+
 

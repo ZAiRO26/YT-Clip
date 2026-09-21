@@ -11,7 +11,7 @@
 [![Kokoro TTS](https://img.shields.io/badge/Kokoro_TTS-Offline_ONNX-orange.svg)](https://github.com/hexgrad/kokoro)
 [![MediaPipe](https://img.shields.io/badge/MediaPipe-Face_Tracking-4285F4.svg)](https://developers.google.com/mediapipe)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-7.0+-007808.svg)](https://ffmpeg.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: BSL 1.1](https://img.shields.io/badge/License-BSL_1.1-red.svg)](LICENSE)
 
 [Features](#-features) • [Quick Start](#-quick-start) • [Architecture](#-architecture) • [Workflow](#-workflow) • [Studio Editor](#-clip-studio-editor) • [Contributing](#-contributing)
 
@@ -200,7 +200,8 @@ pnpm --filter @clipforge/web build
 
 ## 📄 License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [Business Source License 1.1 (BSL-1.1)](LICENSE).
+You may use this software for free for personal, educational, and testing purposes. **You may not use this software in a commercial production or SaaS setting without purchasing a separate commercial license.** After 4 years, the license automatically converts to the MIT License.
 
 ---
 
