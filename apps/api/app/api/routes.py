@@ -37,8 +37,8 @@ from clipforge_core.schemas import (
     ThumbnailRequest,
 )
 from clipforge_core.services.pipeline import create_pipeline_jobs, dispatch_pipeline, dispatch_reclip
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -105,6 +105,54 @@ async def list_campaign_briefs(
         .order_by(CampaignBrief.created_at.desc())
     )
     return result.scalars().all()
+
+
+# ============================================
+# Video Upload (Browser → Server)
+# ============================================
+
+
+@router.post("/upload-video")
+async def upload_video(file: UploadFile = File(...)):
+    """
+    Accept a video file uploaded from the browser and save it to a
+    server-side staging directory. Returns the absolute path so the
+    download worker can ingest it like any other local file.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=422, detail="No filename provided")
+
+    video_extensions = {".mp4", ".mkv", ".webm", ".avi", ".mov", ".flv", ".wmv", ".m4v"}
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in video_extensions:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported video format: {suffix}. Supported: {', '.join(sorted(video_extensions))}",
+        )
+
+    # Save to a staging directory inside MEDIA_DIR
+    staging_dir = Path(settings.MEDIA_DIR) / "_uploads"
+    staging_dir.mkdir(parents=True, exist_ok=True)
+
+    # Use a unique filename to avoid collisions
+    safe_name = f"{uuid.uuid4().hex[:8]}_{file.filename}"
+    dest_path = staging_dir / safe_name
+
+    try:
+        with open(dest_path, "wb") as f:
+            while chunk := await file.read(1024 * 1024):  # 1MB chunks
+                f.write(chunk)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {e}")
+
+    file_size_mb = round(dest_path.stat().st_size / (1024 * 1024), 2)
+    logger.info(f"[Upload] Saved {file.filename} ({file_size_mb} MB) to {dest_path}")
+
+    return JSONResponse(content={
+        "path": str(dest_path),
+        "filename": file.filename,
+        "file_size_mb": file_size_mb,
+    })
 
 
 # ============================================

@@ -71,6 +71,8 @@ export default function NewProjectPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
 
   const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -81,14 +83,10 @@ export default function NewProjectPage() {
       name: file.name,
       detail: `${sizeMb} MB`,
     });
-    // If user already had a path like D:\Videos\, update the filename
-    if (sourceValue && (sourceValue.includes("\\") || sourceValue.includes("/"))) {
-      const lastSlash = Math.max(sourceValue.lastIndexOf("\\"), sourceValue.lastIndexOf("/"));
-      const dir = sourceValue.slice(0, lastSlash + 1);
-      setSourceValue(dir + file.name);
-    } else {
-      setSourceValue(file.name);
-    }
+    // Store the actual File object for upload during submission
+    setPendingUploadFile(file);
+    // Set display name (will be replaced with server path after upload)
+    setSourceValue(file.name);
   };
 
   const handleFolderSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -187,10 +185,31 @@ export default function NewProjectPage() {
     setSubmitting(true);
 
     try {
+      // If user picked a file via the browser file picker, upload it first
+      let resolvedSourceValue = sourceValue.trim();
+      let resolvedSourceType = sourceType;
+
+      if (pendingUploadFile && sourceType === "local_folder") {
+        setUploadProgress(`Uploading ${pendingUploadFile.name}...`);
+        try {
+          const uploadResult = await api.uploadVideo(pendingUploadFile);
+          resolvedSourceValue = uploadResult.path;
+          resolvedSourceType = "local_folder";
+          setUploadProgress(null);
+        } catch (uploadErr) {
+          setUploadProgress(null);
+          throw new Error(
+            uploadErr instanceof Error
+              ? `File upload failed: ${uploadErr.message}`
+              : "File upload failed"
+          );
+        }
+      }
+
       const input: CreateProjectInput = {
         title: title.trim() || undefined,
-        source_type: sourceType,
-        source_value: sourceValue.trim(),
+        source_type: resolvedSourceType,
+        source_value: resolvedSourceValue,
         rights_basis: rightsBasis,
         rights_proof_url: rightsProofUrl.trim() || undefined,
         rights_notes: rightsNotes.trim() || undefined,
@@ -979,7 +998,7 @@ export default function NewProjectPage() {
             {submitting ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-                Creating project & declaring rights...
+                {uploadProgress || "Creating project & declaring rights..."}
               </span>
             ) : (
               "Create Project & Start Ingestion"

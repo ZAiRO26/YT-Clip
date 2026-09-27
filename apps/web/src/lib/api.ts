@@ -183,6 +183,24 @@ class ApiClient {
     return this.request<CampaignBrief[]>("/api/campaign-briefs");
   }
 
+  // Video Upload
+  async uploadVideo(file: File): Promise<{ path: string; filename: string; file_size_mb: number }> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch(`${this.base}/api/upload-video`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(error.detail || `Upload failed: ${res.status}`);
+    }
+
+    return res.json();
+  }
+
   // Projects
   async createProject(data: CreateProjectInput) {
     return this.request<Project>("/api/projects", {
