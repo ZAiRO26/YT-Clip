@@ -258,26 +258,105 @@ def select_clips(
         )
         temporal_bins_directive = format_bin_directives(temporal_bins)
 
-    # Build prompt
-    prompt = _build_selection_prompt(
-        transcript=transcript,
-        scenes=scenes,
-        campaign_brief=campaign_brief,
-        editorial_template=editorial_template,
-        rights_basis=rights_basis,
-        clip_count=clip_count,
-        min_length_sec=min_length_sec,
-        max_length_sec=max_length_sec,
-        custom_prompt=custom_prompt,
-        temporal_bins_directive=temporal_bins_directive,
-        content_focus=content_focus,
-    )
+    # Determine if we need to batch the LLM calls for large transcripts
+    segments = transcript.get("segments", [])
+    total_duration = transcript.get("duration_sec", 60.0)
 
-    update_job_progress(project_id, stage="select", percent=30.0, detail="Awaiting LLM extraction (this takes a moment)...")
+    # Strategy: if requesting >3 clips, split the transcript into time-based chunks
+    # and send each chunk as a separate LLM request for a proportional number of clips
+    MAX_CLIPS_PER_BATCH = 5  # Sweet spot for most LLMs to reliably return
+    need_batching = clip_count > MAX_CLIPS_PER_BATCH and len(segments) > 100
 
-    try:
-        # Run async LLM completion in event loop with retry for insufficient clips
-        raw_clips: List[Dict[str, Any]] = []
+    if need_batching:
+        num_batches = (clip_count + MAX_CLIPS_PER_BATCH - 1) // MAX_CLIPS_PER_BATCH
+        effective_start = time_range_start or 0.0
+        effective_end = time_range_end or total_duration
+        chunk_duration = (effective_end - effective_start) / num_batches
+
+        all_raw_clips: List[Dict[str, Any]] = []
+        clips_remaining = clip_count
+
+        for batch_idx in range(num_batches):
+            batch_start = effective_start + batch_idx * chunk_duration
+            batch_end = effective_start + (batch_idx + 1) * chunk_duration
+            batch_clips_count = min(MAX_CLIPS_PER_BATCH, clips_remaining)
+            clips_remaining -= batch_clips_count
+
+            if batch_clips_count <= 0:
+                break
+
+            # Filter segments for this time chunk
+            batch_segments = [
+                s for s in segments
+                if s.get("start", 0.0) >= batch_start and s.get("end", 0.0) <= batch_end
+            ]
+            if not batch_segments:
+                continue
+
+            batch_transcript = {**transcript, "segments": batch_segments}
+
+            update_job_progress(
+                project_id, stage="select",
+                percent=30.0 + (50.0 * batch_idx / num_batches),
+                detail=f"LLM batch {batch_idx + 1}/{num_batches} ({batch_clips_count} clips from {batch_start:.0f}s–{batch_end:.0f}s)..."
+            )
+
+            batch_prompt = _build_selection_prompt(
+                transcript=batch_transcript,
+                scenes=[s for s in scenes if batch_start <= s.get("start_sec", s.get("time", 0.0)) <= batch_end][:10],
+                campaign_brief=campaign_brief,
+                editorial_template=editorial_template,
+                rights_basis=rights_basis,
+                clip_count=batch_clips_count,
+                min_length_sec=min_length_sec,
+                max_length_sec=max_length_sec,
+                custom_prompt=custom_prompt,
+                temporal_bins_directive="",
+                content_focus=content_focus,
+            )
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                batch_response = loop.run_until_complete(
+                    llm_client.complete_json(
+                        prompt=batch_prompt,
+                        system=SELECTION_SYSTEM_PROMPT,
+                        temperature=0.25,
+                        max_tokens=4096,
+                    )
+                )
+            finally:
+                loop.close()
+
+            batch_raw = (
+                batch_response.get("clips", []) if isinstance(batch_response, dict) else batch_response
+            )
+            logger.info(f"[LLM Select] Batch {batch_idx + 1}/{num_batches}: got {len(batch_raw)} clips")
+            all_raw_clips.extend(batch_raw)
+
+        raw_clips = all_raw_clips
+        logger.info(f"[LLM Select] Batched selection complete: {len(raw_clips)} total clips from {num_batches} batches")
+
+    else:
+        # Single-shot for small clip counts
+        prompt = _build_selection_prompt(
+            transcript=transcript,
+            scenes=scenes,
+            campaign_brief=campaign_brief,
+            editorial_template=editorial_template,
+            rights_basis=rights_basis,
+            clip_count=clip_count,
+            min_length_sec=min_length_sec,
+            max_length_sec=max_length_sec,
+            custom_prompt=custom_prompt,
+            temporal_bins_directive=temporal_bins_directive,
+            content_focus=content_focus,
+        )
+
+        update_job_progress(project_id, stage="select", percent=30.0, detail="Awaiting LLM extraction (this takes a moment)...")
+
+        raw_clips = []
         max_llm_attempts = 3
 
         for attempt in range(1, max_llm_attempts + 1):
@@ -309,11 +388,70 @@ def select_clips(
             else:
                 logger.warning(
                     f"[LLM Select] Attempt {attempt}/{max_llm_attempts}: LLM returned {len(raw_clips)} clips "
-                    f"but {clip_count} were requested. {'Retrying...' if attempt < max_llm_attempts else 'Proceeding with available clips.'}"
+                    f"but {clip_count} were requested. {'Retrying...' if attempt < max_llm_attempts else 'Proceeding.'}"
                 )
 
-        update_job_progress(project_id, stage="select", percent=80.0, detail="Ranking candidates & deduplicating...")
+    # === Fallback: if LLM still returned fewer clips, generate evenly-spaced fillers ===
+    if len(raw_clips) < clip_count:
+        shortfall = clip_count - len(raw_clips)
+        logger.warning(f"[LLM Select] LLM underdelivered by {shortfall} clips. Generating transcript-based fillers.")
 
+        # Find time ranges NOT already covered by LLM clips
+        covered_ranges = [(float(c.get("start_sec", 0)), float(c.get("end_sec", 0))) for c in raw_clips]
+        effective_start = time_range_start or 0.0
+        effective_end = time_range_end or total_duration
+        available_duration = effective_end - effective_start
+
+        for filler_idx in range(shortfall):
+            # Evenly space filler clips across the timeline
+            target_time = effective_start + (available_duration * (filler_idx + 0.5) / shortfall)
+
+            # Find the nearest segment to this target time
+            nearest_seg = min(segments, key=lambda s: abs(s.get("start", 0.0) - target_time), default=None)
+            if not nearest_seg:
+                continue
+
+            filler_start = float(nearest_seg.get("start", target_time))
+
+            # Check if this overlaps with existing clips
+            overlaps = any(
+                filler_start >= cs and filler_start <= ce
+                for cs, ce in covered_ranges
+            )
+            if overlaps:
+                # Shift forward to avoid overlap
+                filler_start = max(ce for cs, ce in covered_ranges if filler_start >= cs and filler_start <= ce) + 2.0
+
+            filler_end = filler_start + ((min_length_sec + max_length_sec) / 2.0)
+            filler_end = min(filler_end, effective_end)
+
+            if filler_end - filler_start < min_length_sec:
+                continue
+
+            # Grab text around this time for a title
+            nearby_text = " ".join(
+                s.get("text", "").strip()
+                for s in segments
+                if filler_start <= s.get("start", 0.0) <= filler_start + 10
+            )[:60]
+
+            raw_clips.append({
+                "start_sec": round(filler_start, 1),
+                "end_sec": round(filler_end, 1),
+                "title": f"Highlight @ {int(filler_start)}s" + (f" — {nearby_text}..." if nearby_text else ""),
+                "hook_type": "bold_statement",
+                "hook_text": nearby_text[:80] if nearby_text else "Check this out!",
+                "editorial_potential": 0.65,
+                "reasoning": "Auto-generated filler to meet requested clip count.",
+                "suggested_callouts": [],
+            })
+            covered_ranges.append((filler_start, filler_end))
+
+        logger.info(f"[LLM Select] After fillers: {len(raw_clips)} total clips")
+
+    update_job_progress(project_id, stage="select", percent=80.0, detail="Ranking candidates & deduplicating...")
+
+    try:
         total_source_dur = transcript.get("duration_sec", 60.0)
 
         # Compute transformation score and enrich candidates
@@ -428,9 +566,9 @@ def select_clips(
                         review_status="pending",
                     )
                     db_session.add(clip_record)
-                    db_session.flush() # flush to get the id if needed, though we already generated it
+                    db_session.flush()
                     c["clip_id"] = str(clip_record.id)
-                    existing_clips.append(clip_record) # add to existing so we don't duplicate within the same batch
+                    existing_clips.append(clip_record)
 
             # Record audit event
             audit = ProjectAuditEvent(
@@ -473,3 +611,4 @@ def select_clips(
             update_job_progress(project_id, stage="select", status="failed", error_message=error_msg, force_write=True)
             _update_project_status(project_id, "failed")
             raise
+
