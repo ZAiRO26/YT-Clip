@@ -114,7 +114,7 @@ def _build_selection_prompt(
 {custom_prompt if custom_prompt else "Identify the most engaging standalone moments matching the campaign brief and editorial template."}
 
 ## TASK
-Select up to {clip_count} highlight candidates.
+Select exactly {clip_count} highlight candidates. You MUST return exactly {clip_count} clips — no fewer.
 - Target clip duration: nominally {min_length_sec} to {max_length_sec} seconds (the boundary-aware clamp engine will snap to valid boundaries). If a key exchange or routine naturally extends longer, provide the full natural scene range.
 - Clips should not overlap.
 - Hook Type must be one of: "question", "bold_statement", "surprising_stat", "story_loop", "controversial_thesis".
@@ -276,25 +276,43 @@ def select_clips(
     update_job_progress(project_id, stage="select", percent=30.0, detail="Awaiting LLM extraction (this takes a moment)...")
 
     try:
-        # Run async LLM completion in event loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            response_json = loop.run_until_complete(
-                llm_client.complete_json(
-                    prompt=prompt,
-                    system=SELECTION_SYSTEM_PROMPT,
-                    temperature=0.2,
+        # Run async LLM completion in event loop with retry for insufficient clips
+        raw_clips: List[Dict[str, Any]] = []
+        max_llm_attempts = 3
+
+        for attempt in range(1, max_llm_attempts + 1):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                current_prompt = prompt
+                if attempt > 1:
+                    current_prompt = prompt + f"\n\n⚠️ CRITICAL: Your previous response contained only {len(raw_clips)} clips. You MUST return exactly {clip_count} clips. This is attempt {attempt}/{max_llm_attempts}."
+
+                response_json = loop.run_until_complete(
+                    llm_client.complete_json(
+                        prompt=current_prompt,
+                        system=SELECTION_SYSTEM_PROMPT,
+                        temperature=0.2 + (attempt - 1) * 0.1,
+                        max_tokens=8192,
+                    )
                 )
+            finally:
+                loop.close()
+
+            raw_clips = (
+                response_json.get("clips", []) if isinstance(response_json, dict) else response_json
             )
-        finally:
-            loop.close()
+
+            if len(raw_clips) >= clip_count:
+                logger.info(f"[LLM Select] Got {len(raw_clips)} clips on attempt {attempt}")
+                break
+            else:
+                logger.warning(
+                    f"[LLM Select] Attempt {attempt}/{max_llm_attempts}: LLM returned {len(raw_clips)} clips "
+                    f"but {clip_count} were requested. {'Retrying...' if attempt < max_llm_attempts else 'Proceeding with available clips.'}"
+                )
 
         update_job_progress(project_id, stage="select", percent=80.0, detail="Ranking candidates & deduplicating...")
-
-        raw_clips: List[Dict[str, Any]] = (
-            response_json.get("clips", []) if isinstance(response_json, dict) else response_json
-        )
 
         total_source_dur = transcript.get("duration_sec", 60.0)
 

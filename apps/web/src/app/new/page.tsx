@@ -547,7 +547,7 @@ export default function NewProjectPage() {
               <input
                 type="number"
                 min={1}
-                max={20}
+                max={50}
                 value={clipCount}
                 onChange={(e) => setClipCount(parseInt(e.target.value) || 5)}
                 className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"

@@ -141,7 +141,7 @@ class LLMClient:
         prompt: str,
         system: str | None = None,
         temperature: float = 0.1,
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
     ) -> dict[str, Any] | list[Any]:
         """
         Send a chat completion request expecting JSON output.
