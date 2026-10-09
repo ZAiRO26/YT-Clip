@@ -90,10 +90,12 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
 
     transcript_segments = []
     focal_timeline = []
+    transcript_lang = "en"
     if analysis_file.exists():
         analysis_data = json.loads(analysis_file.read_text(encoding="utf-8"))
         transcript_segments = analysis_data.get("transcript", {}).get("segments", [])
         focal_timeline = analysis_data.get("face_tracking", {}).get("timeline", [])
+        transcript_lang = analysis_data.get("transcript", {}).get("language", "en")
 
     # Fetch Project & Source Asset from DB
     session = get_sync_session()
@@ -204,6 +206,18 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                     detail=f"Rendering clip {idx+1}/{total_clips} ({p:.0f}%)"
                 )
 
+            # Prepare segments for this clip; if non-English audio, translate to pure English subtitles
+            clip_segs = [
+                s for s in transcript_segments
+                if s.get("end", 0.0) >= start_s and s.get("start", 0.0) <= end_s
+            ]
+            if transcript_lang != "en" and caption_style != "none" and clip_segs:
+                try:
+                    from clipforge_core.services.subtitle_translator import translate_segments_to_english
+                    clip_segs = translate_segments_to_english(clip_segs, context_title=cand.get("title", ""))
+                except Exception as e:
+                    logger.warning(f"Could not translate segments for clip {clip_num}: {e}")
+
             # Execute rendering
             render_res = render_clip(
                 source_path=source_video,
@@ -214,7 +228,7 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                 focal_x=focal_x,
                 focal_timeline=clip_timeline if crop_mode == "stacked_speaker" else None,
                 caption_style=caption_style,
-                transcript_segments=transcript_segments,
+                transcript_segments=clip_segs or transcript_segments,
                 output_thumbnail_path=out_thumb_path,
                 progress_callback=clip_progress,
             )
@@ -305,7 +319,6 @@ def render_project_clips(self, project_id: str) -> Dict[str, Any]:
                     clip_rec.file_url = rel_file_url
                     clip_rec.thumbnail_url = rel_thumb_url
                     clip_rec.render_manifest = manifest
-                    clip_rec.review_status = "pending"
                     db_session.commit()
             except Exception as e:
                 logger.error(f"Failed to update clip record in DB: {e}")

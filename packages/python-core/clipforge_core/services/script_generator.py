@@ -36,6 +36,8 @@ def enforce_word_count(script: str, style: str) -> Tuple[str, int]:
     Enforce hard word count limits for the given style.
     If the text exceeds max_words, cleanly truncates at the boundary.
     """
+    # Emoji/pictographs are unspeakable for TTS and LLMs add them to hype copy
+    script = re.sub(r'[🀀-🫿☀-➿️‍]', '', script)
     cleaned = re.sub(r'\s+', ' ', script.strip())
     words = cleaned.split()
     budget = STYLE_WORD_BUDGETS.get(style, {"min_words": 6, "max_words": 15})

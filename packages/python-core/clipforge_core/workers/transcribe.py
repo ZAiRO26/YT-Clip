@@ -138,11 +138,16 @@ def transcribe_audio(source_path: str, output_dir: str, project_id: str | None =
 
     logger.info(f"Transcribing: {source.name}")
 
-    # Run transcription
+    # Run transcription with Latin/Hinglish initial prompt to bias Whisper toward Latin script
+    initial_prompt = (
+        "Hindi and English dialogue in clean Latin script (Hinglish), e.g. "
+        "Haan, ladka, jail, bail, stand-up comedy show, Samay, Ayushmann, YouTube, podcast."
+    )
     segments_iter, info = model.transcribe(
         str(source),
         beam_size=5,
         word_timestamps=True,
+        initial_prompt=initial_prompt,
         vad_filter=True,  # Voice Activity Detection — skip silence
         vad_parameters=dict(
             min_silence_duration_ms=500,

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { api, type Project, type Clip, type ReclipInput } from "@/lib/api";
+import { api, resolveMediaUrl, type Project, type Clip, type ReclipInput } from "@/lib/api";
 import Link from "next/link";
 import toast from "react-hot-toast";
 
@@ -111,15 +111,15 @@ function ClipCard({
   onReject: () => void;
 }) {
   const duration = clip.end_sec - clip.start_sec;
-  const normalizedFileUrl = clip.file_url ? clip.file_url.replace(/\\/g, "/") : "";
-  const normalizedThumbUrl = clip.thumbnail_url ? clip.thumbnail_url.replace(/\\/g, "/") : "";
-  const videoUrl = normalizedFileUrl ? (normalizedFileUrl.startsWith("media") ? `http://localhost:8000/${normalizedFileUrl}` : normalizedFileUrl) : "";
-  const thumbUrl = normalizedThumbUrl ? (normalizedThumbUrl.startsWith("media") ? `http://localhost:8000/${normalizedThumbUrl}` : normalizedThumbUrl) : "";
+  const rawVideo = resolveMediaUrl(clip.file_url);
+  const rawThumb = resolveMediaUrl(clip.thumbnail_url);
+  const videoUrl = rawVideo ? `${rawVideo}?v=${clip.id}` : "";
+  const thumbUrl = rawThumb ? `${rawThumb}?v=${clip.id}` : "";
 
   const handleRegenerateThumb = async () => {
     try {
       // In a real app we might ask for text overlay here
-      await fetch(`http://localhost:8000/api/clips/${clip.id}/thumbnail`, {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/clips/${clip.id}/thumbnail`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: null, style: "minimal" }),

@@ -315,23 +315,29 @@ def select_clips(
                 content_focus=content_focus,
             )
 
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                batch_response = loop.run_until_complete(
-                    llm_client.complete_json(
-                        prompt=batch_prompt,
-                        system=SELECTION_SYSTEM_PROMPT,
-                        temperature=0.25,
-                        max_tokens=4096,
+            batch_raw = []
+            for attempt in range(1, 3):
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    batch_response = loop.run_until_complete(
+                        llm_client.complete_json(
+                            prompt=batch_prompt,
+                            system=SELECTION_SYSTEM_PROMPT,
+                            temperature=0.25,
+                            max_tokens=16384,
+                        )
                     )
-                )
-            finally:
-                loop.close()
+                    batch_raw = (
+                        batch_response.get("clips", []) if isinstance(batch_response, dict) else batch_response
+                    )
+                    if batch_raw:
+                        break
+                except Exception as e:
+                    logger.warning(f"[LLM Select] Batch {batch_idx + 1} attempt {attempt} failed: {e}")
+                finally:
+                    loop.close()
 
-            batch_raw = (
-                batch_response.get("clips", []) if isinstance(batch_response, dict) else batch_response
-            )
             logger.info(f"[LLM Select] Batch {batch_idx + 1}/{num_batches}: got {len(batch_raw)} clips")
             all_raw_clips.extend(batch_raw)
 
@@ -372,7 +378,7 @@ def select_clips(
                         prompt=current_prompt,
                         system=SELECTION_SYSTEM_PROMPT,
                         temperature=0.2 + (attempt - 1) * 0.1,
-                        max_tokens=8192,
+                        max_tokens=16384,
                     )
                 )
             finally:

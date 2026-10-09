@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, type ProjectListItem } from "@/lib/api";
+import { api, resolveMediaUrl, type ProjectListItem } from "@/lib/api";
 import Link from "next/link";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -126,7 +126,7 @@ export default function DashboardPage() {
                       <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
                         {(project as any).preview_url ? (
                           <img 
-                            src={(project as any).preview_url.startsWith("media") ? `http://localhost:8000/${(project as any).preview_url.replace(/\\/g, "/")}` : (project as any).preview_url.replace(/\\/g, "/")} 
+                            src={resolveMediaUrl((project as any).preview_url)} 
                             alt="Project thumbnail" 
                             className="w-full h-full object-cover" 
                           />

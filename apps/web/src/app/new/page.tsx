@@ -833,6 +833,17 @@ export default function NewProjectPage() {
               </div>
             </div>
 
+            <div>
+              <label className="text-xs text-cf-muted block mb-1.5">Include specific moments (optional)</label>
+              <input
+                type="text"
+                placeholder="Example: find all the moments when someone scored"
+                value={customPrompt}
+                onChange={(e) => setCustomPrompt(e.target.value)}
+                className="w-full rounded-lg bg-background border border-border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+
             {/* 5C: Time Window Selector (shown when focus_window selected) */}
             {temporalDistribution === "focus_window" && (
               <div className="rounded-lg bg-card/50 border border-border p-4 space-y-3">

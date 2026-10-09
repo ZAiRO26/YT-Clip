@@ -55,8 +55,8 @@ class Settings(BaseSettings):
     DEFAULT_CAPTION_STYLE: str = "bold_karaoke"
 
     # --- Paths ---
-    MEDIA_DIR: str = "./media"
-    TEMP_DIR: str = "./temp"
+    MEDIA_DIR: str = str(Path(__file__).resolve().parent.parent.parent.parent / "media")
+    TEMP_DIR: str = str(Path(__file__).resolve().parent.parent.parent.parent / "temp")
 
     model_config = {
         "env_file": [".env", str(Path(__file__).resolve().parent.parent.parent.parent / ".env")],

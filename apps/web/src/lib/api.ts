@@ -316,3 +316,17 @@ export interface GeneratedVoiceoverScript {
 }
 
 export const api = new ApiClient(API_BASE);
+
+/**
+ * Normalizes relative or absolute media paths into fully qualified URLs
+ * that can be played or previewed by frontend components.
+ */
+export function resolveMediaUrl(url: string | null | undefined): string {
+  if (!url) return "";
+  const clean = url.replace(/\\/g, "/");
+  if (clean.startsWith("http://") || clean.startsWith("https://")) {
+    return clean;
+  }
+  const path = clean.startsWith("/") ? clean.slice(1) : clean;
+  return `${API_BASE}/${path}`;
+}

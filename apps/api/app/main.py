@@ -82,7 +82,7 @@ app.include_router(settings_router)
 
 media_dir = Path(settings.MEDIA_DIR)
 media_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/media", StaticFiles(directory=str(media_dir)), name="media")
+app.mount("/media", StaticFiles(directory=str(media_dir), follow_symlink=True), name="media")
 
 
 # ============================================

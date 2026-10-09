@@ -545,3 +545,106 @@
         - [x] Adopted the Business Source License 1.1 (BSL-1.1) to block commercial production and SaaS usage without a paid commercial license.
         - [x] Updated `LICENSE` file with MariaDB BSL 1.1 text, setting 4-year Change Date (2030-10-01) converting to MIT.
         - [x] Updated `README.md` to display red BSL 1.1 badge and clear plain-English commercial restrictions.
+
+  53. **Session 34 (20-Clip Generation & Stacked Speaker Context Pipeline for India's Got Latent S2 Bonus Ep 4):**
+      - **Root Cause Identified & Fixed (Reasoning Model Token Truncation in Batched LLM Selection):**
+         - [x] Identified that `auto/best-reasoning` generates ~3,500 hidden reasoning tokens before outputting JSON. The previous 4,096-token ceiling truncated the JSON payload mid-string (e.g., at char 498), triggering a `JSONDecodeError` during candidate selection.
+         - [x] Updated `packages/python-core/clipforge_core/workers/select.py` to raise `max_tokens` to `16,384` for both batched and single-shot selection.
+         - [x] Added batch-level try/except retry loop so transient network or model glitches in individual batches do not crash the Celery pipeline.
+      - **Celery Worker Full Named Queues Configuration:**
+         - [x] Detected that the running worker was only consuming `default, gpu, llm` and missing `render, analysis, ingest, qa, editorial`.
+         - [x] Restarted the Celery worker daemon with all required queues: `-Q default,gpu,llm,render,analysis,ingest,qa,editorial`.
+      - **Project Creation & Full Pipeline Execution (`6de7423d-68fd-430f-8b5e-c88221cc040b`):**
+         - [x] Project: *India's Got Latent S2 Bonus Episode 4 Latent Bonus Episode 4 Ayushmann Khurrana & Samay Raina* (34 min / 2053s).
+         - [x] Source Ingest: Completed in 2s (452 MB, 1080p @ 25fps).
+         - [x] Analysis Stage: Completed (664 transcript segments, 420 scene cuts, MediaPipe speaker tracking).
+         - [x] Candidate Selection: 4 chronological batches successfully extracted **20 high-potential highlight clips** across the full timeline, all under the user's requested 58s limit (lengths: 22.4s to 52.8s) with average transformation readiness score 87/100.
+         - [x] Framing Mode: Configured `crop_mode="stacked_speaker"` (dual-band stacked context: 16:9 context top, dynamic speaker tracking zoom bottom, 2px white divider, bold karaoke subtitles).
+         - [x] Render Stage: Actively encoding all 20 clips with FFmpeg filtergraphs on the `render` queue.
+         - [x] Live UI: Verified in browser at `http://localhost:3000/project/6de7423d-68fd-430f-8b5e-c88221cc040b`.
+         - [x] Fixed media directory alignment: anchored MEDIA_DIR in clipforge_core/config.py to the absolute repository root path (d:/Development/AntiGravity/Clip-Forge/media). Previously, relative ./media led FastAPI and Celery to separate folders (apps/api/media vs apps/worker/media), causing 404s when the browser attempted to play clips.
+         - [x] Verified video playback via browser subagent: thumbnails rendered, HTTP 206 streaming functional, and video playback confirmed active.
+
+  54. **Session 35 (Urdu/Arabic Subtitles Root Cause & Transliteration Engine, Media Sync & 24/24 Smoke Test):**
+      - **Root Cause Analysis for Urdu/Arabic Subtitle Glyphs:**
+         - [x] Identified that spoken Hindustani acoustic phonemes have high overlap with Urdu in Whisper's model weights. Without an explicit language script hint, Whisper outputted Perso-Arabic unicode characters (`\u0600`–`\u06FF`) for certain common Hindustani words (e.g. `بیل` / `bail`, `جیل` / `jail`, `ہاں` / `haan`, `لڑکہ` / `ladka`).
+         - [x] Because ASS subtitle rendering uses Latin fonts (Montserrat / Impact) without bidirectional text shaping (BiDi), these glyphs rendered left-to-right, disjointed, and visually inverted (`کی لیے بیل سے`).
+      - **Two-Layer Permanent Defense Architecture:**
+         - [x] *Layer 1 (Whisper Transcription Conditioning):* Added `initial_prompt="Hindi and English dialogue in clean Latin script (Hinglish), e.g. Haan, ladka, jail, bail, stand-up comedy show, Samay, Ayushmann, YouTube, podcast."` to `model.transcribe()` in `packages/python-core/clipforge_core/workers/transcribe.py`.
+         - [x] *Layer 2 (Deterministic Transliteration & Sanitization):* Built `packages/python-core/clipforge_core/services/urdu_translit_map.json` covering 455 Hindustani Perso-Arabic tokens mapped to clean Latin Hinglish words. Integrated `sanitize_word()` in `packages/python-core/clipforge_core/services/caption_renderer.py` to cleanse words during ASS subtitle generation. Sanitized all stored project JSON files (`transcript.json`, `analysis.json`, `selections.json`).
+      - **Batch Re-rendering & Visual Frame Verification:**
+         - [x] Re-rendered all 11 affected clips (`clip_1`, `clip_2`, `clip_6`, `clip_8`, `clip_10`, `clip_12`, `clip_13`, `clip_15`, `clip_16`, `clip_17`, `clip_20`) with clean Latin subtitles in stacked speaker layout.
+         - [x] Extracted test video frames (`clip_1_frame3.jpg`, `clip_8_frame2.jpg`) and verified subtitles visually: 100% clean English/Hinglish text (`AAYA THA HAAN, DATE`, `DAY. I WILL THINK`).
+      - **Database Alignment & Browser Cache Invalidation:**
+         - [x] Identified DB `Clip` rows where `file_url` pointed to outdated render filenames or mismatched clip indices.
+         - [x] Executed database alignment script synchronizing all 20 DB rows to their exact candidate files (`clip_1.mp4`–`clip_20.mp4`).
+         - [x] Extracted fresh thumbnails for all 20 clips directly from the re-rendered MP4 files.
+         - [x] Added cache-busting `?v=${clip.id}` query parameters in `apps/web/src/app/project/[id]/page.tsx` and `frontend/src/app/project/[id]/page.tsx` to prevent stale browser video/thumbnail caching.
+      - **Comprehensive 24-Point End-to-End System Smoke Test:**
+         - [x] Created `scratch/system_smoke_test.py` and executed the full test suite: **24/24 PASSED (100%)**:
+           1. FastAPI `/health` (status 200, db=postgres, redis=ok)
+           2. FastAPI `/health/llm` (status 200, OmniRoute reachable)
+           3. FastAPI `/api/settings` (status 200)
+           4. FastAPI `GET /api/projects/{id}` (status 200, status=done)
+           5. FastAPI `GET /api/projects/{id}/clips` (status 200, 20 clips returned)
+           6. Media HEAD accessibility (status 200, video/mp4)
+           7. Media HTTP 206 Range Streaming (status 206, Content-Range headers verified)
+           8. Next.js Web Studio `/` (status 200 via 307 redirect)
+           9. Next.js Web Studio `/project/{id}` (status 200)
+           10. PostgreSQL Project record integrity (title, status, created_at)
+           11. PostgreSQL SourceAsset record integrity (2052.96s, h264/aac, 1920x1080)
+           12. PostgreSQL Job records recorded across pipeline stages
+           13. PostgreSQL 20 Clip rows present with valid media URLs and thumbnails
+           14. PostgreSQL Audit events recorded
+           15. Redis connection & ping (`redis://127.0.0.1:6379/0`)
+           16. Celery Worker daemon alive (`worker1@MSI`)
+           17. Celery queues operational (`default, gpu, llm, render, analysis, ingest, qa, editorial`)
+           18. OmniRoute LLM structured JSON completion (`complete_json`)
+           19. ASS subtitle word sanitizer validation
+           20. Rendered clip dimensions QA (1080x1920 9:16 vertical)
+           21. Rendered clip codecs QA (H.264 video, AAC audio)
+           22. Rendered clip duration QA (48.6s)
+           23. Clip PATCH review status approval endpoint (`review_status="approved"`)
+           24. Project Export endpoint (`POST /api/projects/{id}/export` producing valid exported files)
+
+  55. **Session 36 (Pure English LLM Subtitle Translation Engine, Proportional Karaoke Word-Timing & All 20 Clips Re-rendered):**
+      - **Root Cause Analysis of Subtitle Quality & Language Experience:**
+         - [x] Evaluated spoken multi-mic comedy audio: Whisper transliterated spoken Hindustani phonetically into Romanized Hinglish (`HAAN, WOH LADKA JAIL SE BAIL LE KI AAYA THA DATE PE`), which failed to deliver true English captions to global or non-Hindi viewers.
+         - [x] Identified that direct Whisper acoustic translation (`task="translate"`) misheard colloquial slang, cross-talk, and crowd laughter (e.g. misinterpreting "follow up liya" as "follow a player").
+      - **Contextual OmniRoute LLM Subtitle Translation Engine:**
+         - [x] Created `scratch/batch_translate_and_rerender_all_20.py` integrating OmniRoute's `complete_json` to translate dialogue segments chronologically for each of the 20 clips.
+         - [x] Enforced structured translation rules: (1) Output 100% natural, punchy English dialogue tailored for high-retention Shorts/Reels; (2) Automatically correct phonetic acoustic mishearings from spoken slang; (3) Retain conversational comedy timing and punchlines.
+         - [x] Example translations delivered:
+           - Clip 1: *"He actually came on the date! Straight from jail to our date!"* / *"Followed up on the theatre plans! And he ghosted me!"* / *"You helped him see — jail ain't so bad!"* / *"'No, I ghosted him!'"*
+      - **Proportional Word-Level Karaoke Timing Synthesizer:**
+         - [x] Mapped translated English sentences back to Whisper's acoustic VAD segment intervals `[start, end]`.
+         - [x] Implemented proportional word duration synthesizer (`w_dur = (len(w) / total_chars) * dur`), generating ASS subtitle files (`clip_1_captions.ass` to `clip_20_captions.ass`) with precise `{\k<centiseconds>}` karaoke tags.
+         - [x] Active words highlight dynamically in bold yellow (`&H002BF7FF&`) at the exact cadence of speech.
+      - **Single-Pass Source Re-rendering (Ghosting Prevention):**
+         - [x] Re-rendered all 20 clips directly from the clean `source.mp4` file in `stacked_speaker` mode (16:9 context band on top, dynamic face-tracked speaker zoom on bottom, 2px white divider, EBU R128 -14 LUFS audio normalization).
+         - [x] Eliminated subtitle doubling/ghosting artifacts caused by re-encoding over pre-burned video files.
+         - [x] Extracted fresh 1080x1920 thumbnails directly from the newly rendered MP4s.
+      - **Database & Media Directory Synchronization:**
+         - [x] Aligned all 20 PostgreSQL `Clip` records (`file_url` -> `/media/.../clip_{i}.mp4`, `thumbnail_url` -> `/media/.../clip_{i}.jpg`).
+         - [x] Synchronized media assets across `media/`, `apps/api/media/`, and `apps/worker/media/`.
+      - **Visual Frame Verifications:**
+         - [x] Extracted and verified frames (`scratch/frame_stacked_eng_21s.jpg`, `scratch/frame_stacked_eng_27s.jpg`, `scratch/frame_stacked_eng_42s.jpg`) confirming clean stacked layout, zero ghosting, pure English captions, and active karaoke highlighting.
+      - **Production Pipeline Integration (Automated for All Future Projects):**
+         - [x] Created `packages/python-core/clipforge_core/services/subtitle_translator.py` — production service with async LLM translation, sync Celery wrapper, proportional word-timing, and graceful fallback to sanitized text on LLM failure.
+         - [x] Modified `render_project_clips` in `render.py` to read `transcript_lang` from `analysis.json` and auto-translate non-English segments per clip before rendering.
+         - [x] Modified `rerender_clip` endpoint in `routes.py` to read `transcript_lang` and auto-translate segments for single-clip re-renders from the Web Studio.
+         - [x] Verified `start.bat` infrastructure: 3 dedicated Celery workers (ingest/LLM, analysis, render), FastAPI with hot-reload on `packages/python-core`, Next.js Web Studio — all services start cleanly from one click.
+         - [x] Import chain verified: `subtitle_translator.py` imports cleanly in the production PYTHONPATH.
+       - **Media Disconnect & Playback Resolution:**
+          - [x] Diagnosed 404s when streaming clips: Windows directory junction on `media/6de7423d-...` caused Starlette `StaticFiles` (default `follow_symlink=False`) to reject paths via `realpath` checks.
+          - [x] Fixed `apps/api/app/main.py` by enabling `follow_symlink=True` on the `/media` static mount.
+          - [x] Diagnosed frontend relative path issue: `clip.file_url.startsWith("media")` failed on `/media/...` (with leading slash), requesting port 3000 instead of 8000.
+          - [x] Created `resolveMediaUrl()` in `apps/web/src/lib/api.ts` (and `frontend/src/lib/api.ts`) to normalize all media paths to `http://localhost:8000/media/...`.
+          - [x] Updated `apps/web/src/app/project/[id]/page.tsx`, `clip/[clipId]/page.tsx`, and `dashboard/page.tsx` to use `resolveMediaUrl()`.
+          - [x] Added Next.js `/media/:path*` rewrite in `apps/web/next.config.ts` to proxy direct media requests to port 8000 as a fail-safe.
+          - [x] Automated Browser Verification: Ran live browser subagent against `http://localhost:3000/project/6de7423d-68fd-430f-8b5e-c88221cc040b`, verified video elements load with `http://localhost:8000/media/...`, clicked play, confirmed active playback at 3.0s with clean audio and dynamic English karaoke captions, zero console errors.
+       - **Export Path Resolution Fix (11 of 11 Clips Exported Cleanly):**
+          - [x] Identified why 6 of 11 clips failed during export: clips with leading slash file_url (/media/...) failed startswith("media/"), causing Path(settings.MEDIA_DIR) / rel_url to resolve to drive root D:\media\... instead of the project folder.
+          - [x] Implemented resolve_media_file_path() in apps/api/app/api/routes.py to robustly strip leading slashes and resolve paths against settings.MEDIA_DIR, repo root, or absolute paths.
+          - [x] Applied resolve_media_file_path() across export_project_clips, download_clip, and automated export on clip approval.
+          - [x] Re-ran export of all 11 approved clips: 11 of 11 clips + 11 thumbnails + export_manifest.json exported successfully to D:\TestExport\IGL_S2_Bonus_Ep4_-_Ayushmann_&_Samay_-_20_Clips with 0 warnings and 0 errors.

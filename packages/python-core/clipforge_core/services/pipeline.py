@@ -102,7 +102,7 @@ def _update_project(project_id: str, status: str) -> None:
         session.close()
 
 
-def dispatch_pipeline(project_id: str, project: Project) -> str:
+def dispatch_pipeline(project_id: str, project: Project, custom_prompt: str | None = None) -> str:
     """
     Dispatch the full v2 pipeline as a distributed Celery chain across dedicated queues.
     """
@@ -128,7 +128,7 @@ def dispatch_pipeline(project_id: str, project: Project) -> str:
             clip_count=project.clip_count,
             min_length_sec=project.min_length_sec,
             max_length_sec=project.max_length_sec,
-            custom_prompt=None,
+            custom_prompt=custom_prompt,
             time_range_start=project.time_range_start,
             time_range_end=project.time_range_end,
             temporal_distribution=project.temporal_distribution,

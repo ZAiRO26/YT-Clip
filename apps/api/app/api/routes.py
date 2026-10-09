@@ -15,6 +15,8 @@ integration will be added in Phase 4 with the frontend.
 
 import json
 import logging
+import re
+import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,6 +48,36 @@ from sqlalchemy.orm import selectinload
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["api"])
+
+
+def resolve_media_file_path(url_or_path: str | None) -> Optional[Path]:
+    """
+    Robustly resolves a stored media URL or relative path into an existing absolute Path on disk.
+    Handles leading slashes, 'media/' prefixes, Windows backslashes, junctions, and repo-root fallbacks.
+    """
+    if not url_or_path:
+        return None
+    clean = url_or_path.replace("\\", "/").lstrip("/")
+    if clean.startswith("media/"):
+        clean = clean[len("media/") :]
+
+    media_base = Path(settings.MEDIA_DIR).resolve()
+    candidate = media_base / clean
+    if candidate.exists():
+        return candidate
+
+    try:
+        raw_p = Path(url_or_path)
+        if raw_p.exists():
+            return raw_p
+    except Exception:
+        pass
+
+    repo_p = media_base.parent / "media" / clean
+    if repo_p.exists():
+        return repo_p
+
+    return candidate
 
 # Temporary: hardcoded user for v1 (single-user mode)
 # Will be replaced with Supabase Auth in Phase 4
@@ -260,7 +292,7 @@ async def create_project(
 
     # Dispatch pipeline (Celery tasks)
     try:
-        dispatch_pipeline(project_id, project)
+        dispatch_pipeline(project_id, project, custom_prompt=data.custom_prompt)
     except Exception as e:
         logger.error(f"Failed to dispatch pipeline: {e}")
         # Don't fail the request — the project is created, pipeline can be retried
@@ -497,12 +529,8 @@ async def update_clip(
                 export_path = res.scalar()
                 if export_path:
                     export_path = export_path.strip('"')
-                    import shutil
-                    from pathlib import Path
-
-                    media_base = Path(settings.MEDIA_DIR).parent
-                    source_path = media_base / clip.file_url
-                    if source_path.exists():
+                    source_path = resolve_media_file_path(clip.file_url)
+                    if source_path and source_path.exists():
                         target_dir = Path(export_path)
                         target_dir.mkdir(parents=True, exist_ok=True)
                         target_path = target_dir / f"clip_{clip.id}.mp4"
@@ -533,7 +561,10 @@ async def regenerate_thumbnail(
 
     from clipforge_core.workers.thumbnail import generate_thumbnail
 
-    video_path = clip.file_url
+    video_file = resolve_media_file_path(clip.file_url)
+    if not video_file or not video_file.exists():
+        raise HTTPException(status_code=404, detail="File on disk not found")
+    video_path = str(video_file)
 
     # We will save it in the same directory
     output_path = video_path.rsplit(".", 1)[0] + "_custom_thumb.jpg"
@@ -545,7 +576,7 @@ async def regenerate_thumbnail(
     if not success:
         raise HTTPException(status_code=500, detail="Failed to generate thumbnail")
 
-    clip.thumbnail_url = output_path
+    clip.thumbnail_url = clip.file_url.rsplit(".", 1)[0] + "_custom_thumb.jpg"
     await session.commit()
     await session.refresh(clip)
 
@@ -563,14 +594,8 @@ async def download_clip(
     if not clip or not clip.file_url:
         raise HTTPException(status_code=404, detail="Clip or video file not found")
 
-    rel_url = clip.file_url.replace("\\", "/")
-    if rel_url.startswith("media/"):
-        rel_url = rel_url[len("media/") :]
-
-    media_base = Path(settings.MEDIA_DIR).resolve()
-    file_path = media_base / rel_url
-
-    if not file_path.exists():
+    file_path = resolve_media_file_path(clip.file_url)
+    if not file_path or not file_path.exists():
         raise HTTPException(status_code=404, detail="File on disk not found")
 
     filename = f"clip_{clip_id}.mp4"
@@ -646,19 +671,13 @@ async def export_project_clips(
     errors = []
     exported_manifest_items = []
 
-    media_base = Path(settings.MEDIA_DIR).resolve()
-
     for idx, clip in enumerate(approved_clips):
         try:
-            # Normalize backslashes and strip media prefix
-            rel_url = clip.file_url.replace("\\", "/")
-            if rel_url.startswith("media/"):
-                rel_url = rel_url[len("media/") :]
+            source_path = resolve_media_file_path(clip.file_url)
 
-            source_path = media_base / rel_url
-
-            if source_path.exists():
-                clip_title_raw = getattr(clip, "title", None) or f"clip_{idx + 1}"
+            if source_path and source_path.exists():
+                title_match = re.match(r"^\[[^\]]*\]\s*(.+?)\s+—", clip.reasoning or "")
+                clip_title_raw = (title_match.group(1) if title_match else None) or f"clip_{idx + 1}"
                 safe_clip_title = re.sub(r'[\\/*?:"<>|]', "", str(clip_title_raw)).strip().replace(" ", "_")[:50]
                 clip_filename = f"{exported_count + 1:02d}_{safe_clip_title}.mp4"
                 dest_path = target_export_dir / clip_filename
@@ -667,11 +686,8 @@ async def export_project_clips(
                 # Also copy thumbnail if it exists
                 thumb_filename = None
                 if clip.thumbnail_url:
-                    thumb_rel = clip.thumbnail_url.replace("\\", "/")
-                    if thumb_rel.startswith("media/"):
-                        thumb_rel = thumb_rel[len("media/") :]
-                    thumb_source = media_base / thumb_rel
-                    if thumb_source.exists():
+                    thumb_source = resolve_media_file_path(clip.thumbnail_url)
+                    if thumb_source and thumb_source.exists():
                         thumb_filename = f"{exported_count + 1:02d}_{safe_clip_title}_thumb.jpg"
                         thumb_dest = target_export_dir / thumb_filename
                         shutil.copy2(thumb_source, thumb_dest)
@@ -958,6 +974,7 @@ async def rerender_single_clip(
     Re-render a single clip with custom trimming, caption style, voiceover, or effects
     without re-running upstream download and transcription.
     """
+    import asyncio
     from pathlib import Path
 
     from clipforge_core.services.audio_mixer import mix_audio_tracks
@@ -981,6 +998,8 @@ async def rerender_single_clip(
 
     start_sec = float(payload.get("start_sec", clip.start_sec))
     end_sec = float(payload.get("end_sec", clip.end_sec))
+    if start_sec < 0 or end_sec - start_sec < 1.0:
+        raise HTTPException(status_code=422, detail="end_sec must be at least 1 second after start_sec")
     caption_style = payload.get("caption_style", "bold_karaoke")
     crop_mode = payload.get("crop_mode", "face_track")
     voiceover_text = payload.get("voiceover_text")
@@ -991,6 +1010,7 @@ async def rerender_single_clip(
     # Load transcript segments and face tracking if available
     analysis_file = project_dir / "analysis.json"
     segments = []
+    transcript_lang = "en"
     focal_x = 0.5
     clip_timeline = None
 
@@ -999,6 +1019,7 @@ async def rerender_single_clip(
             import json
             analysis_data = json.loads(analysis_file.read_text(encoding="utf-8"))
             segments = analysis_data.get("transcript", {}).get("segments", [])
+            transcript_lang = analysis_data.get("transcript", {}).get("language", "en")
             focal_timeline = analysis_data.get("face_tracking", {}).get("timeline", [])
             if crop_mode in ["face_track", "stacked_speaker"]:
                 clip_pts = [
@@ -1051,16 +1072,32 @@ async def rerender_single_clip(
     if voiceover_text and voiceover_text.strip():
         vo_asset_id = str(uuid.uuid4())
         vo_path = clips_dir / f"vo_{clip.id}.wav"
-        synth_res = synthesize_voiceover(voiceover_text, voice_id=voice_id, output_path=vo_path)
+        synth_res = await asyncio.to_thread(synthesize_voiceover, voiceover_text, voice_id=voice_id, output_path=vo_path)
         actual_vo_duration = float(synth_res.get("duration_sec", 0.0))
 
     # Optional Music bed
     bg_music_path = None
     if music_track and music_track != "none":
         bg_music_path = clips_dir / f"music_{clip.id}.aac"
-        ensure_synth_bed(music_track, bg_music_path, duration_sec=end_sec - start_sec)
+        await asyncio.to_thread(ensure_synth_bed, music_track, bg_music_path, duration_sec=end_sec - start_sec)
 
-    render_clip(
+    # If source audio is non-English, translate segments to pure English before rendering
+    if transcript_lang != "en" and caption_style != "none" and segments:
+        try:
+            from clipforge_core.services.subtitle_translator import translate_segments_to_english
+            clip_segs = [
+                s for s in segments
+                if s.get("end", 0.0) >= start_sec and s.get("start", 0.0) <= end_sec
+            ]
+            if clip_segs:
+                segments = await asyncio.to_thread(translate_segments_to_english, clip_segs, context_title=(clip.reasoning or project.title or "")[:120])
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Could not translate segments for clip rerender: {e}")
+
+    # Heavy FFmpeg/TTS work runs in worker threads so the API stays responsive during a re-render
+    await asyncio.to_thread(
+        render_clip,
         source_path=source_video,
         output_path=out_video_path,
         start_sec=start_sec,
@@ -1075,7 +1112,8 @@ async def rerender_single_clip(
 
     # Apply motion effects post-render if requested
     if active_effects:
-        apply_motion_effects(
+        await asyncio.to_thread(
+            apply_motion_effects,
             source_video_path=out_video_path,
             output_video_path=out_video_path,
             effects=active_effects,
@@ -1103,7 +1141,8 @@ async def rerender_single_clip(
         else:
             vo_offset = float(payload.get("voiceover_delay_sec", 0.5))
 
-        mix_audio_tracks(
+        await asyncio.to_thread(
+            mix_audio_tracks,
             source_video_path=out_video_path,
             output_audio_path=mixed_audio,
             start_sec=0.0,
@@ -1128,7 +1167,7 @@ async def rerender_single_clip(
             str(temp_muxed),
         ]
         import subprocess
-        subprocess.run(mux_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        await asyncio.to_thread(subprocess.run, mux_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         import os
         os.replace(temp_muxed, out_video_path)
 

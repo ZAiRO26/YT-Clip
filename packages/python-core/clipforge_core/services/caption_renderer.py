@@ -8,8 +8,96 @@ Presets:
 3. clean_subtitle: Standard centered subtitle with dark background box.
 4. none: Disabled captions.
 """
+import json
 from pathlib import Path
+import re
 from typing import Any, Dict, List
+
+_URDU_TRANSLIT_MAP: Dict[str, str] | None = None
+
+_URDU_CHAR_MAP: Dict[str, str] = {
+    '\u0627': 'a', '\u0622': 'aa', '\u0628': 'b', '\u067e': 'p', '\u062a': 't', '\u0679': 't', '\u062b': 's',
+    '\u062c': 'j', '\u0686': 'ch', '\u062d': 'h', '\u062e': 'kh', '\u062f': 'd', '\u0688': 'd', '\u0630': 'z',
+    '\u0631': 'r', '\u0691': 'r', '\u0632': 'z', '\u0698': 'zh', '\u0633': 's', '\u0634': 'sh', '\u0635': 's',
+    '\u0636': 'z', '\u0637': 't', '\u0638': 'z', '\u0639': 'a', '\u063a': 'gh', '\u0641': 'f', '\u0642': 'q',
+    '\u06a9': 'k', '\u06af': 'g', '\u0644': 'l', '\u0645': 'm', '\u0646': 'n', '\u06ba': 'n', '\u0648': 'o',
+    '\u06c1': 'h', '\u06be': 'h', '\u0621': '', '\u06cc': 'i', '\u06d2': 'e', '\u0626': 'i', '\u0624': 'o',
+    '\u06c2': 'ah', '\u06c3': 't', '\u06d3': 'e',
+}
+
+
+def _is_perso_arabic(ch: str) -> bool:
+    return (
+        '\u0600' <= ch <= '\u06FF'
+        or '\u0750' <= ch <= '\u077F'
+        or '\u08A0' <= ch <= '\u08FF'
+        or '\uFB50' <= ch <= '\uFDFF'
+        or '\uFE70' <= ch <= '\uFEFF'
+    )
+
+
+def _get_translit_map() -> Dict[str, str]:
+    global _URDU_TRANSLIT_MAP
+    if _URDU_TRANSLIT_MAP is None:
+        try:
+            map_path = Path(__file__).parent / "urdu_translit_map.json"
+            if map_path.exists():
+                _URDU_TRANSLIT_MAP = json.loads(map_path.read_text(encoding="utf-8"))
+            else:
+                _URDU_TRANSLIT_MAP = {}
+        except Exception:
+            _URDU_TRANSLIT_MAP = {}
+    return _URDU_TRANSLIT_MAP
+
+
+def sanitize_word(word: str) -> str:
+    """
+    Sanitize word so Perso-Arabic/Urdu tokens are transliterated to clean Latin/Roman Hinglish.
+    Preserves surrounding punctuation and guarantees zero disconnected right-to-left glyphs in ASS.
+    Multi-tier protection:
+      1. Word-level transliteration dictionary lookup (semantic accuracy)
+      2. Character-level phonetic transliteration fallback (for unseen tokens)
+      3. Total unicode strip of any residual Perso-Arabic glyphs
+    """
+    if not word:
+        return ""
+
+    if not any(_is_perso_arabic(ch) for ch in word):
+        return word
+
+    translit_map = _get_translit_map()
+
+    # Extract leading punctuation, core token, and trailing punctuation
+    m = re.match(
+        r"^([^\w\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]*)"
+        r"([\w\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+)"
+        r"([^\w\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]*)$",
+        word,
+    )
+    if m:
+        prefix, core, suffix = m.groups()
+        # 1. Direct word lookup
+        roman = translit_map.get(core)
+        if roman:
+            return f"{prefix}{roman}{suffix}"
+        # 2. Substring lookup for pure urdu chars
+        urdu_only = "".join(c for c in core if _is_perso_arabic(c))
+        if urdu_only in translit_map:
+            return f"{prefix}{translit_map[urdu_only]}{suffix}"
+        # 3. Phonetic character-by-character fallback
+        phonetic = "".join(_URDU_CHAR_MAP.get(c, c) for c in core)
+        # 4. Strict guarantee: strip any remaining Arabic-range unicode
+        cleaned = "".join(c for c in phonetic if not _is_perso_arabic(c))
+        return f"{prefix}{cleaned}{suffix}".strip()
+
+    if word in translit_map:
+        return translit_map[word]
+
+    # Phonetic fallback + strip
+    phonetic = "".join(_URDU_CHAR_MAP.get(c, c) for c in word)
+    return "".join(c for c in phonetic if not _is_perso_arabic(c))
+
+
 
 
 def format_ass_timestamp(seconds: float) -> str:
@@ -49,8 +137,8 @@ def get_ass_header(
     elif style_preset == "clean_subtitle":
         # Classic box background subtitle
         style_def = (
-            f"Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&HA0000000,"
-            f"0,0,0,0,100,100,0,0,3,0,0,2,80,80,{margin_v},1"
+            f"Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H60000000,&H60000000,"
+            f"0,0,0,0,100,100,0,0,3,8,0,2,80,80,{margin_v},1"
         )
     else:  # none or default fallback
         style_def = (
@@ -103,11 +191,13 @@ def generate_ass_subtitles(
                 w_start = w.get("start", 0.0)
                 w_end = w.get("end", 0.0)
                 if w_end >= clip_start_sec and w_start <= clip_end_sec:
-                    clip_words.append({
-                        "word": w.get("word", "").strip(),
-                        "start": max(0.0, w_start - clip_start_sec),
-                        "end": max(0.0, w_end - clip_start_sec),
-                    })
+                    clean_w = sanitize_word(w.get("word", "").strip())
+                    if clean_w:
+                        clip_words.append({
+                            "word": clean_w,
+                            "start": max(0.0, w_start - clip_start_sec),
+                            "end": max(0.0, w_end - clip_start_sec),
+                        })
         else:
             # Fallback if no word timestamps: split segment text evenly
             seg_s = seg.get("start", 0.0)
@@ -120,20 +210,35 @@ def generate_ass_subtitles(
                         ws = seg_s + (i * dur_per_word)
                         we = ws + dur_per_word
                         if we >= clip_start_sec and ws <= clip_end_sec:
-                            clip_words.append({
-                                "word": rw,
-                                "start": max(0.0, ws - clip_start_sec),
-                                "end": max(0.0, we - clip_start_sec),
-                            })
+                            clean_w = sanitize_word(rw.strip())
+                            if clean_w:
+                                clip_words.append({
+                                    "word": clean_w,
+                                    "start": max(0.0, ws - clip_start_sec),
+                                    "end": max(0.0, we - clip_start_sec),
+                                })
 
     events: List[str] = []
 
     # Group into short digestible chunks (2 to 4 words per line for mobile 9:16)
     i = 0
     while i < len(clip_words):
-        chunk = clip_words[i : i + words_per_line]
-        if not chunk:
-            break
+        # End the line early at a sentence end or a speech pause so lines don't straddle them
+        chunk = [clip_words[i]]
+        while len(chunk) < words_per_line and i + len(chunk) < len(clip_words):
+            nxt = clip_words[i + len(chunk)]
+            if chunk[-1]["word"].rstrip("\"')").endswith((".", "?", "!")) or nxt["start"] - chunk[-1]["end"] > 0.7:
+                break
+            chunk.append(nxt)
+        # Pull in a lone sentence-final word rather than flashing it as its own line
+        if len(chunk) == words_per_line and i + len(chunk) < len(clip_words):
+            nxt = clip_words[i + len(chunk)]
+            if (
+                not chunk[-1]["word"].rstrip("\"')").endswith((".", "?", "!"))
+                and nxt["word"].rstrip("\"')").endswith((".", "?", "!"))
+                and nxt["start"] - chunk[-1]["end"] <= 0.7
+            ):
+                chunk.append(nxt)
 
         chunk_start = chunk[0]["start"]
         chunk_end = chunk[-1]["end"]
@@ -148,8 +253,10 @@ def generate_ass_subtitles(
         if style_preset == "bold_karaoke":
             # Karaoke timing tags: {\k<centiseconds>}Word
             text_parts = []
-            for w in chunk:
-                w_dur_centi = max(10, int(round((w["end"] - w["start"]) * 100)))
+            for w_idx, w in enumerate(chunk):
+                # Hold each word until the next one starts so pauses don't desync the highlight
+                w_next = chunk[w_idx + 1]["start"] if w_idx + 1 < len(chunk) else w["end"]
+                w_dur_centi = max(10, int(round((max(w_next, w["end"]) - w["start"]) * 100)))
                 clean_word = w["word"].upper()
                 text_parts.append(f"{{\\k{w_dur_centi}}}{clean_word}")
             ass_text = " ".join(text_parts)
@@ -157,7 +264,7 @@ def generate_ass_subtitles(
             ass_text = " ".join(w["word"] for w in chunk)
 
         events.append(f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{ass_text}")
-        i += words_per_line
+        i += len(chunk)
 
     full_ass = get_ass_header(style_preset, layout_mode=layout_mode) + "\n".join(events) + "\n"
     out_path.write_text(full_ass, encoding="utf-8")

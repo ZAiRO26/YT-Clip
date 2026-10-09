@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import { api, VoiceoverContext } from "@/lib/api";
+import { api, resolveMediaUrl, VoiceoverContext } from "@/lib/api";
 
 interface ClipDetail {
   id: string;
@@ -215,9 +215,8 @@ export default function ClipEditorPage() {
     );
   };
 
-  const videoUrl = clip?.file_url
-    ? `${clip.file_url.startsWith("media") ? `${apiBase}/${clip.file_url}` : clip.file_url}?v=${videoVersion}`
-    : "";
+  const rawVideo = resolveMediaUrl(clip?.file_url);
+  const videoUrl = rawVideo ? `${rawVideo}?v=${videoVersion}` : "";
 
   if (loading) {
     return (
@@ -293,7 +292,7 @@ export default function ClipEditorPage() {
           {/* Action 2: Re-render Video with effects & audio */}
           <button
             onClick={handleRerender}
-            disabled={rerendering || savingMetadata}
+            disabled={rerendering || savingMetadata || generatingScript}
             className="bg-primary text-primary-foreground px-4 py-1.5 rounded-lg text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5 shadow-sm transition-all"
           >
             {rerendering ? (
@@ -529,7 +528,7 @@ export default function ClipEditorPage() {
                   <button
                     key={s.id}
                     type="button"
-                    disabled={s.disabled || generatingScript}
+                    disabled={s.disabled || generatingScript || rerendering}
                     onClick={() => handleAutoDraftScript(s.id as any)}
                     className={`p-2 rounded-lg text-left transition-all border relative flex flex-col justify-between ${
                       s.disabled

@@ -202,6 +202,8 @@ def apply_motion_effects(
                 "-c:v", "libx264",
                 "-preset", "fast",
                 "-crf", "22",
+                "-maxrate", "8M",
+                "-bufsize", "16M",
                 "-c:a", "copy",
                 str(tmp_out),
             ]
