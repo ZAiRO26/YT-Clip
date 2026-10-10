@@ -20,7 +20,12 @@ from clipforge_core.celery_app import celery_app
 from clipforge_core.config import settings
 from clipforge_core.database import get_sync_session
 from clipforge_core.models import Clip, Job, Project, ProjectAuditEvent
-from clipforge_core.services.candidate_ranker import clamp_to_boundary, deduplicate_and_rank_candidates
+from clipforge_core.services.candidate_ranker import (
+    clamp_to_boundary,
+    deduplicate_and_rank_candidates,
+    expand_to_natural_bit,
+    preferred_length,
+)
 from clipforge_core.services.llm_client import LLMClientError, llm_client
 from clipforge_core.services.temporal_binner import compute_temporal_bins, format_bin_directives, validate_bin_membership
 from clipforge_core.services.transformation_scorer import calculate_transformation_score
@@ -92,6 +97,8 @@ def _build_selection_prompt(
     focus_directive = _CONTENT_FOCUS_DIRECTIVES.get(content_focus, _CONTENT_FOCUS_DIRECTIVES["balanced"])
     temporal_section = f"\n{temporal_bins_directive}\n" if temporal_bins_directive else ""
 
+    preferred_length_sec = round(preferred_length(min_length_sec, max_length_sec))
+
     prompt = f"""## SOURCE VIDEO INFORMATION
 - Total Duration: {total_duration:.1f}s
 - Language: {transcript.get('language', 'unknown')}
@@ -115,7 +122,16 @@ def _build_selection_prompt(
 
 ## TASK
 Select exactly {clip_count} highlight candidates. You MUST return exactly {clip_count} clips — no fewer.
-- Target clip duration: nominally {min_length_sec} to {max_length_sec} seconds (the boundary-aware clamp engine will snap to valid boundaries). If a key exchange or routine naturally extends longer, provide the full natural scene range.
+
+CLIP LENGTH — HARD RULE:
+- Every clip MUST run between {min_length_sec} and {max_length_sec} seconds (end_sec - start_sec). A clip shorter than {min_length_sec}s is INVALID and will be thrown away.
+- A clip is a RANGE covering many transcript lines, never a single line. One transcript line is only a few seconds.
+- Each clip must be a complete, self-contained bit: start_sec = the first line of the setup/context, end_sec = the end of the payoff (punchline, answer, reaction or laugh). Never start on the punchline.
+- Preferred length is {preferred_length_sec}–{max_length_sec}s: include the full setup, the build-up and the reaction after the payoff. At least half of the clips must be longer than {preferred_length_sec}s. Use {min_length_sec}–{preferred_length_sec}s only for a genuinely short one-liner that is complete on its own.
+- start_sec must be the start time of a transcript line and end_sec the end time of a later transcript line.
+- Fill in duration_sec = end_sec - start_sec and check it is within range before answering.
+
+OTHER RULES:
 - Clips should not overlap.
 - Hook Type must be one of: "question", "bold_statement", "surprising_stat", "story_loop", "controversial_thesis".
 - Keep reasoning brief (1 short sentence) and suggested_callouts concise.
@@ -128,6 +144,7 @@ Return a JSON object:
     {{
       "start_sec": 12.5,
       "end_sec": 48.0,
+      "duration_sec": 35.5,
       "title": "Short punchy title",
       "hook_type": "question",
       "hook_text": "Did you know that...",
@@ -141,6 +158,24 @@ Return a JSON object:
 
 
 from clipforge_core.services.progress import update_job_progress
+
+
+def _run_llm_selection(prompt: str, temperature: float) -> List[Dict[str, Any]]:
+    """One blocking LLM selection call; returns the raw clip list."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        response = loop.run_until_complete(
+            llm_client.complete_json(
+                prompt=prompt,
+                system=SELECTION_SYSTEM_PROMPT,
+                temperature=temperature,
+                max_tokens=16384,
+            )
+        )
+    finally:
+        loop.close()
+    return response.get("clips", []) if isinstance(response, dict) else response
 
 
 def _update_project_status(project_id: str, status: str) -> None:
@@ -463,11 +498,16 @@ def select_clips(
         # Compute transformation score and enrich candidates
         transcript_segments = transcript.get("segments", [])
 
-        enriched_candidates = []
         clamp_stats = {"none": 0, "sentence_boundary": 0, "scene_boundary": 0, "raw_fallback": 0}
-        for raw in raw_clips:
+
+        def enrich(raw: Dict[str, Any]) -> Dict[str, Any]:
             start_s = float(raw.get("start_sec", 0.0))
             end_s = float(raw.get("end_sec", start_s + min_length_sec))
+
+            # Widen payoff-only picks into a full bit before enforcing the hard limits
+            start_s, end_s = expand_to_natural_bit(
+                start_s, end_s, min_length_sec, max_length_sec, transcript_segments
+            )
 
             # Boundary-aware duration enforcement
             start_s, end_s, clamp_method = clamp_to_boundary(
@@ -514,7 +554,9 @@ def select_clips(
                 "suggested_callouts": raw.get("suggested_callouts", []),
                 "clamp_method": clamp_method,
             }
-            enriched_candidates.append(cand)
+            return cand
+
+        enriched_candidates = [enrich(raw) for raw in raw_clips]
 
         logger.info(f"[LLM Select] Clamp stats: {clamp_stats}")
 
@@ -530,7 +572,61 @@ def select_clips(
                 )
 
         # Snap to scene cut boundaries and deduplicate
-        final_clips = deduplicate_and_rank_candidates(enriched_candidates, scenes=scenes)
+        final_clips = deduplicate_and_rank_candidates(enriched_candidates, scenes=scenes, max_length_sec=max_length_sec)
+
+        # Refill: overlap removal can leave fewer clips than requested. Ask for one more
+        # pick from each of the largest stretches that have no clip yet (also evens out the spread).
+        range_start = time_range_start or 0.0
+        range_end = time_range_end or total_source_dur
+        for _refill_round in range(2):
+            shortfall = clip_count - len(final_clips)
+            if shortfall <= 0:
+                break
+            gaps = []
+            cursor = range_start
+            for c_start, c_end in sorted((c["start_sec"], c["end_sec"]) for c in final_clips):
+                if c_start - cursor >= max_length_sec * 2:
+                    gaps.append((c_start - cursor, cursor, c_start))
+                cursor = max(cursor, c_end)
+            if range_end - cursor >= max_length_sec * 2:
+                gaps.append((range_end - cursor, cursor, range_end))
+            gaps.sort(reverse=True)
+
+            extra_raw: List[Dict[str, Any]] = []
+            for _gap_len, gap_start, gap_end in gaps[: min(shortfall, 6)]:
+                gap_segments = [
+                    s for s in transcript_segments
+                    if s.get("start", 0.0) >= gap_start and s.get("end", 0.0) <= gap_end
+                ]
+                if len(gap_segments) < 5:
+                    continue
+                update_job_progress(
+                    project_id, stage="select", percent=85.0,
+                    detail=f"Filling gap {gap_start:.0f}s–{gap_end:.0f}s ({shortfall} clips short)...",
+                )
+                try:
+                    extra_raw.extend(_run_llm_selection(
+                        _build_selection_prompt(
+                            transcript={**transcript, "segments": gap_segments},
+                            scenes=[],
+                            campaign_brief=campaign_brief,
+                            editorial_template=editorial_template,
+                            rights_basis=rights_basis,
+                            clip_count=1,
+                            min_length_sec=min_length_sec,
+                            max_length_sec=max_length_sec,
+                            custom_prompt=custom_prompt,
+                            content_focus=content_focus,
+                        ),
+                        temperature=0.3,
+                    )[:1])
+                except Exception as e:
+                    logger.warning(f"[LLM Select] Refill call failed for gap {gap_start:.0f}s–{gap_end:.0f}s: {e}")
+            if not extra_raw:
+                break
+            final_clips = deduplicate_and_rank_candidates(
+                final_clips + [enrich(r) for r in extra_raw], scenes=scenes, max_length_sec=max_length_sec
+            )
 
         # Limit to requested clip count
         final_clips = final_clips[:clip_count]

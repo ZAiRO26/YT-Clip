@@ -129,3 +129,38 @@ def test_clamp_within_bounds_returns_none():
     assert start == 100.0
     assert end == 140.0
     assert method == "none"
+
+
+# --- expand_to_natural_bit: widen payoff-only picks into a full bit ---
+
+def _one_second_segments(count, pauses_after=()):
+    """Back-to-back 1s segments starting at 0; a 1s silence follows each index in pauses_after."""
+    segs, t = [], 0.0
+    for k in range(count):
+        segs.append({"start": t, "end": t + 1.0})
+        t += 2.0 if k in pauses_after else 1.0
+    return segs
+
+
+def test_expand_short_pick_grows_mostly_backward_within_limits():
+    from clipforge_core.services.candidate_ranker import expand_to_natural_bit
+
+    segs = _one_second_segments(200)
+    start, end = expand_to_natural_bit(100.0, 104.0, 20, 60, segs)
+    assert 36.0 <= end - start <= 60.0  # reached preferred length (20 + 40% of 40), capped at max
+    assert (100.0 - start) > (end - 104.0)  # more setup than aftermath
+
+
+def test_expand_leaves_long_enough_pick_untouched():
+    from clipforge_core.services.candidate_ranker import expand_to_natural_bit
+
+    segs = _one_second_segments(200)
+    assert expand_to_natural_bit(50.0, 95.0, 20, 60, segs) == (50.0, 95.0)
+
+
+def test_expand_never_shrinks_pick_that_runs_past_last_segment():
+    from clipforge_core.services.candidate_ranker import expand_to_natural_bit
+
+    segs = _one_second_segments(50)  # speech ends at 50s
+    start, end = expand_to_natural_bit(45.0, 58.0, 20, 60, segs)
+    assert end >= 58.0 and start <= 45.0 and end - start <= 60.0

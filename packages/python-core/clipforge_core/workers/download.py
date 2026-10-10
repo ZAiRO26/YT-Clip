@@ -10,6 +10,7 @@ Pipeline stage 1 (Ingest Queue):
 """
 import logging
 import shutil
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -154,7 +155,8 @@ def _download_youtube(url: str, output_path: Path, project_id: str) -> dict:
             )
 
     ydl_opts = {
-        "format": "best[ext=mp4]/bestvideo[height<=1080]+bestaudio/best",
+        # Prefer H.264: AV1 is far slower to decode on CPU and has no hardware decode on older GPUs
+        "format": "bestvideo[height<=1080][vcodec^=avc1]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
         "outtmpl": str(output_path),
         "merge_output_format": "mp4",
         "quiet": True,
@@ -162,37 +164,48 @@ def _download_youtube(url: str, output_path: Path, project_id: str) -> dict:
         "extract_flat": False,
         "noplaylist": True,
         "progress_hooks": [progress_hook],
+        "retries": 5,
+        "fragment_retries": 5,
     }
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            if info is None:
-                raise ValueError(f"Could not extract info from URL: {url}")
+    # YouTube intermittently answers 403 on a freshly signed media URL; a new
+    # extraction gets a new URL, so retry the whole extract+download a few times.
+    last_error: Exception | None = None
+    for attempt in range(1, 4):
+        try:
+            return _run_youtube_download(url, ydl_opts)
+        except yt_dlp.utils.DownloadError as e:
+            error_str = str(e).lower()
+            if "private" in error_str:
+                raise ValueError(f"Video is private or requires authentication: {url}")
+            elif "unavailable" in error_str or "not available" in error_str:
+                raise ValueError(f"Video is unavailable or region-locked: {url}")
+            elif "not a valid url" in error_str or "unsupported url" in error_str:
+                raise ValueError(f"Invalid YouTube URL: {url}")
+            last_error = e
+            logger.warning(f"YouTube download attempt {attempt}/3 failed: {e}")
+            time.sleep(5 * attempt)
+    raise ValueError(f"Download failed after 3 attempts: {last_error}")
 
-            metadata = {
-                "title": info.get("title", "Unknown"),
-                "duration_sec": info.get("duration", 0),
-                "resolution": f"{info.get('width', '?')}x{info.get('height', '?')}",
-                "uploader": info.get("uploader", "Unknown"),
-                "view_count": info.get("view_count", 0),
-                "upload_date": info.get("upload_date", ""),
-            }
 
-            logger.info(f"Downloading YouTube video: {metadata['title']} ({metadata['duration_sec']}s)")
-            ydl.download([url])
-            return metadata
+def _run_youtube_download(url: str, ydl_opts: dict) -> dict:
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        if info is None:
+            raise ValueError(f"Could not extract info from URL: {url}")
 
-    except yt_dlp.utils.DownloadError as e:
-        error_str = str(e).lower()
-        if "private" in error_str:
-            raise ValueError(f"Video is private or requires authentication: {url}")
-        elif "unavailable" in error_str or "not available" in error_str:
-            raise ValueError(f"Video is unavailable or region-locked: {url}")
-        elif "not a valid url" in error_str or "unsupported url" in error_str:
-            raise ValueError(f"Invalid YouTube URL: {url}")
-        else:
-            raise ValueError(f"Download failed: {e}")
+        metadata = {
+            "title": info.get("title", "Unknown"),
+            "duration_sec": info.get("duration", 0),
+            "resolution": f"{info.get('width', '?')}x{info.get('height', '?')}",
+            "uploader": info.get("uploader", "Unknown"),
+            "view_count": info.get("view_count", 0),
+            "upload_date": info.get("upload_date", ""),
+        }
+
+        logger.info(f"Downloading YouTube video: {metadata['title']} ({metadata['duration_sec']}s)")
+        ydl.download([url])
+        return metadata
 
 
 def _ingest_local_folder(folder_path: str, project_dir: Path) -> dict:

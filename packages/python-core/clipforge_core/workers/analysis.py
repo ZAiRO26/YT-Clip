@@ -9,6 +9,7 @@ Pipeline stage 2 (Analysis Queue):
 - Updates jobs and emits audit events
 """
 import json
+import time
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -19,6 +20,7 @@ from clipforge_core.celery_app import celery_app
 from clipforge_core.config import settings
 from clipforge_core.database import get_sync_session
 from clipforge_core.models import Job, Project, ProjectAuditEvent
+from clipforge_core.services.analysis_proxy import create_analysis_proxy
 from clipforge_core.services.face_tracker import track_faces
 from clipforge_core.services.scene_detector import detect_scenes
 from clipforge_core.workers.transcribe import transcribe_audio
@@ -94,6 +96,9 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
             except Exception as e:
                 logger.warning(f"[Analysis] Cached analysis.json could not be parsed: {e}")
 
+        timings: Dict[str, float] = {}
+        step_started = time.monotonic()
+
         # Step 1: Faster-Whisper Transcription (or load existing cached transcript)
         transcript_file = project_dir / "transcript.json"
         if transcript_file.exists():
@@ -104,12 +109,28 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
             logger.info(f"[Analysis] Transcribing audio for project {project_id}")
             transcript = transcribe_audio(str(video_file), str(project_dir), project_id=project_id)
 
+        timings["transcribe_sec"] = round(time.monotonic() - step_started, 1)
+        step_started = time.monotonic()
+
+        # Step 1b: Small analysis copy for the two frame-scanning steps (falls back to the source)
+        update_job_progress(project_id, stage="analysis", percent=60.0, detail="Preparing fast analysis copy...", force_write=True)
+        proxy_file = create_analysis_proxy(
+            video_file,
+            project_dir / "analysis_proxy.mp4",
+            progress_callback=lambda pct, msg: update_job_progress(
+                project_id, stage="analysis", percent=round(60.0 + pct / 100.0 * 6.0, 1), detail=msg
+            ),
+        )
+        analysis_video = proxy_file or video_file
+        timings["proxy_sec"] = round(time.monotonic() - step_started, 1)
+        step_started = time.monotonic()
+
         # Step 2: Scene Detection with graceful fallback
-        update_job_progress(project_id, stage="analysis", percent=62.0, detail="Detecting scene cuts & visual boundaries...", force_write=True)
+        update_job_progress(project_id, stage="analysis", percent=66.0, detail="Detecting scene cuts & visual boundaries...", force_write=True)
 
         def on_scene_progress(scene_pct: float, detail_msg: str):
-            # Maps scene detection 0-100% into 62% - 75% of analysis stage
-            overall_pct = 62.0 + (scene_pct / 100.0) * 13.0
+            # Maps scene detection 0-100% into 66% - 72% of analysis stage
+            overall_pct = 66.0 + (scene_pct / 100.0) * 6.0
             update_job_progress(
                 project_id,
                 stage="analysis",
@@ -119,8 +140,8 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
 
         try:
             logger.info(f"[Analysis] Detecting scenes for project {project_id}")
-            scenes = detect_scenes(video_file, progress_callback=on_scene_progress)
-            update_job_progress(project_id, stage="analysis", percent=75.0, detail=f"Detected {len(scenes)} visual scene cuts.", force_write=True)
+            scenes = detect_scenes(analysis_video, progress_callback=on_scene_progress)
+            update_job_progress(project_id, stage="analysis", percent=72.0, detail=f"Detected {len(scenes)} visual scene cuts.", force_write=True)
         except Exception as e:
             logger.warning(f"[Analysis] Scene detection warning: {e}. Defaulting to continuous scene.")
             scenes = [{
@@ -131,10 +152,13 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
                 "start_frame": 0,
                 "end_frame": int(transcript.get("duration_sec", 60.0) * 30),
             }]
-            update_job_progress(project_id, stage="analysis", percent=75.0, detail="Scene detection fallback applied (single scene).", force_write=True)
+            update_job_progress(project_id, stage="analysis", percent=72.0, detail="Scene detection fallback applied (single scene).", force_write=True)
+
+        timings["scenes_sec"] = round(time.monotonic() - step_started, 1)
+        step_started = time.monotonic()
 
         # Step 3: Face & Subject Tracking with active speaker detection
-        update_job_progress(project_id, stage="analysis", percent=77.0, detail="Analyzing face & active speaker tracking...", force_write=True)
+        update_job_progress(project_id, stage="analysis", percent=72.0, detail="Analyzing face & active speaker tracking...", force_write=True)
 
         # Determine tracking_mode based on project crop_mode
         tracking_mode = "standard"
@@ -149,8 +173,8 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
             session_proj.close()
 
         def on_face_progress(face_pct: float, detail_msg: str):
-            # Maps face tracking 0-100% into 77% - 94% of analysis stage
-            overall_pct = 77.0 + (face_pct / 100.0) * 17.0
+            # Maps face tracking 0-100% into 72% - 94% of analysis stage
+            overall_pct = 72.0 + (face_pct / 100.0) * 22.0
             update_job_progress(
                 project_id,
                 stage="analysis",
@@ -161,7 +185,7 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
         try:
             logger.info(f"[Analysis] Tracking face coordinates for project {project_id} (mode={tracking_mode})")
             face_data = track_faces(
-                video_file,
+                analysis_video,
                 transcript=transcript,
                 progress_callback=on_face_progress,
                 tracking_mode=tracking_mode,
@@ -179,6 +203,11 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
                 "fallback_used": True,
             }
             update_job_progress(project_id, stage="analysis", percent=95.0, detail="Face tracking fallback applied (center-crop).", force_write=True)
+
+        timings["faces_sec"] = round(time.monotonic() - step_started, 1)
+        if proxy_file:
+            proxy_file.unlink(missing_ok=True)
+        logger.info(f"[Analysis] Step timings for project {project_id}: {timings}")
 
         analysis_result = {
             "project_id": project_id,
@@ -206,6 +235,8 @@ def run_analysis(self, project_id: str, source_path: str) -> Dict[str, Any]:
                     "speaker_tracking_used": face_data.get("speaker_tracking_used", False),
                     "language": transcript.get("language", "unknown"),
                     "duration_sec": transcript.get("duration_sec", 0.0),
+                    "used_analysis_proxy": bool(proxy_file),
+                    "timings_sec": timings,
                 },
             )
             session.add(audit)

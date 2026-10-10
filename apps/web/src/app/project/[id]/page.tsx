@@ -8,7 +8,7 @@ import toast from "react-hot-toast";
 
 const STAGE_LABELS: Record<string, string> = {
   download: "Download",
-  transcribe: "Transcribe",
+  transcribe: "Analyze",
   select: "AI Select",
   crop: "Crop & Encode",
   caption: "Caption",
@@ -21,6 +21,21 @@ const STAGE_ICONS: Record<string, string> = {
   crop: "M6.13 1L6 16a2 2 0 0 0 2 2h15M1 6.13L16 6a2 2 0 0 1 2 2v15",
   caption: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
 };
+
+// Sub-steps of the analysis stage and the overall percent at which each one finishes
+const ANALYZE_STEPS = [
+  { label: "Speech to text", until: 60 },
+  { label: "Fast analysis copy", until: 66 },
+  { label: "Scene cuts", until: 72 },
+  { label: "Face tracking", until: 95 },
+];
+
+function formatElapsed(startedAt?: string | null): string | null {
+  if (!startedAt) return null;
+  const mins = Math.floor((Date.now() - new Date(startedAt).getTime()) / 60000);
+  if (mins < 1) return null;
+  return mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; icon: string }> = {
   pending: { bg: "bg-zinc-800", text: "text-zinc-500", icon: "text-zinc-600" },
@@ -35,14 +50,17 @@ function PipelineStage({
   status, 
   errorMessage,
   percent,
-  detail
+  detail,
+  startedAt
 }: { 
   stage: string; 
   status: string; 
   errorMessage: string | null;
   percent?: number | null;
   detail?: string | null;
+  startedAt?: string | null;
 }) {
+  const elapsed = status === "running" ? formatElapsed(startedAt) : null;
   const styles = STATUS_STYLES[status] || STATUS_STYLES.pending;
   const iconPath = STAGE_ICONS[stage] || "";
 
@@ -92,6 +110,22 @@ function PipelineStage({
           )}
         </div>
       </div>
+      {elapsed && <p className="mt-2 text-[10px] text-cf-muted">Running for {elapsed}</p>}
+      {stage === "transcribe" && status === "running" && (
+        <ul className="mt-2 space-y-1">
+          {ANALYZE_STEPS.map((step, idx) => {
+            const pct = percent ?? 0;
+            const done = pct >= step.until;
+            const active = !done && (idx === 0 || pct >= ANALYZE_STEPS[idx - 1].until);
+            return (
+              <li key={step.label} className={`flex items-center gap-2 text-[11px] ${done ? "text-cf-success" : active ? "text-primary" : "text-zinc-600"}`}>
+                <span className="w-3 text-center">{done ? "✓" : active ? "●" : "○"}</span>
+                {step.label}
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {errorMessage && (
         <p className="mt-2 text-xs text-cf-error bg-cf-error/10 rounded-lg px-3 py-2 break-words">
           {errorMessage}
@@ -573,6 +607,7 @@ export default function ProjectDetailPage() {
                     errorMessage={job?.error_message || null}
                     percent={job?.progress_percent}
                     detail={job?.progress_detail}
+                    startedAt={job?.started_at}
                   />
                 );
               })}

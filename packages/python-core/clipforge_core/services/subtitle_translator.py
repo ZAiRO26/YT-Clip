@@ -12,6 +12,39 @@ from clipforge_core.services.caption_renderer import sanitize_word
 
 logger = logging.getLogger(__name__)
 
+def _group_short_segments(
+    segments: List[Dict[str, Any]],
+    min_duration_sec: float = 2.5,
+    max_gap_sec: float = 1.0,
+) -> List[Dict[str, Any]]:
+    """
+    Merge consecutive short segments into phrases of at least min_duration_sec.
+
+    Whisper often emits sub-second segments. A translated line squeezed into one of
+    those flashes by unreadably, so translate and time whole phrases instead.
+    """
+    groups: List[List[Dict[str, Any]]] = []
+    for seg in segments:
+        cur = groups[-1] if groups else None
+        if (
+            cur
+            and seg.get("start", 0.0) - cur[-1].get("end", 0.0) <= max_gap_sec
+            and cur[-1].get("end", 0.0) - cur[0].get("start", 0.0) < min_duration_sec
+        ):
+            cur.append(seg)
+        else:
+            groups.append([seg])
+    return [
+        {
+            "start": g[0].get("start", 0.0),
+            "end": g[-1].get("end", 0.0),
+            "text": " ".join(x.get("text", "").strip() for x in g),
+            "words": [w for x in g for w in x.get("words", [])],
+        }
+        for g in groups
+    ]
+
+
 async def _translate_segments_async(
     segments: List[Dict[str, Any]],
     context_title: str = "",
@@ -19,6 +52,7 @@ async def _translate_segments_async(
     if not segments:
         return []
 
+    segments = _group_short_segments(segments)
     llm_input = [{"id": i, "text": s.get("text", "")} for i, s in enumerate(segments)]
 
     prompt = f"""You are an elite subtitle translator for viral YouTube Shorts and Instagram Reels.

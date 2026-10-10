@@ -9,6 +9,77 @@ from typing import Any, Dict, List, Tuple
 logger = logging.getLogger(__name__)
 
 
+def preferred_length(min_length_sec: float, max_length_sec: float) -> float:
+    """Length a clip should reach before we stop widening it: 40% of the way from min to max."""
+    return min_length_sec + (max_length_sec - min_length_sec) * 0.4
+
+
+def expand_to_natural_bit(
+    start_sec: float,
+    end_sec: float,
+    min_length_sec: float,
+    max_length_sec: float,
+    transcript_segments: List[Dict[str, Any]],
+    pause_sec: float = 0.8,
+) -> Tuple[float, float]:
+    """
+    Widen a too-short pick into a complete bit.
+
+    LLMs often return just the payoff line. Padding that forward to the minimum
+    length drops the setup, so instead grow outward over whole transcript segments,
+    mostly backward (setup comes first), until the clip reaches the preferred length
+    and both edges sit on a speech pause. Never exceeds max_length_sec.
+    Picks already at or above the preferred length are returned untouched.
+    """
+    target = preferred_length(min_length_sec, max_length_sec)
+    if end_sec - start_sec >= target:
+        return start_sec, end_sec
+
+    segs = sorted(
+        (s for s in transcript_segments if s.get("end", 0.0) > s.get("start", 0.0)),
+        key=lambda s: s["start"],
+    )
+    overlapping = [k for k, s in enumerate(segs) if s["end"] > start_sec and s["start"] < end_sec]
+    if not overlapping:
+        return start_sec, end_sec
+    i, j = overlapping[0], overlapping[-1]
+
+    def pause_before(k: int) -> bool:
+        return k == 0 or segs[k]["start"] - segs[k - 1]["end"] >= pause_sec
+
+    def pause_after(k: int) -> bool:
+        return k == len(segs) - 1 or segs[k + 1]["start"] - segs[k]["end"] >= pause_sec
+
+    # Never shrink the original pick (it may run past the last spoken segment, e.g. into applause)
+    s_cur, e_cur = min(start_sec, segs[i]["start"]), max(end_sec, segs[j]["end"])
+    added_back = added_fwd = 0.0
+    while True:
+        can_back = i > 0 and e_cur - segs[i - 1]["start"] <= max_length_sec
+        can_fwd = j < len(segs) - 1 and segs[j + 1]["end"] - s_cur <= max_length_sec
+
+        if e_cur - s_cur >= target:
+            # Long enough: only keep going to land each edge on a pause
+            go_back = can_back and not pause_before(i)
+            go_fwd = can_fwd and not pause_after(j) and not go_back
+        else:
+            # Roughly two parts setup to one part aftermath
+            go_back = can_back and (added_back <= 2 * added_fwd or not can_fwd)
+            go_fwd = can_fwd and not go_back
+
+        if go_back:
+            i -= 1
+            added_back += s_cur - segs[i]["start"]
+            s_cur = segs[i]["start"]
+        elif go_fwd:
+            j += 1
+            added_fwd += segs[j]["end"] - e_cur
+            e_cur = segs[j]["end"]
+        else:
+            break
+
+    return round(s_cur, 2), round(e_cur, 2)
+
+
 def clamp_to_boundary(
     start_sec: float,
     end_sec: float,
@@ -135,6 +206,7 @@ def deduplicate_and_rank_candidates(
     candidates: List[Dict[str, Any]],
     scenes: List[Dict[str, Any]] | None = None,
     max_overlap_ratio: float = 0.25,
+    max_length_sec: float | None = None,
 ) -> List[Dict[str, Any]]:
     """
     Deduplicates candidates that overlap significantly and sorts them by composite rank:
@@ -154,8 +226,10 @@ def deduplicate_and_rank_candidates(
 
         if scenes:
             snapped_s, snapped_e = snap_to_scene_boundaries(start, end, scenes)
-            c["start_sec"] = snapped_s
-            c["end_sec"] = snapped_e
+            # Snapping may nudge a clip up to 1.2s per edge; never let that break the max length
+            if max_length_sec is None or snapped_e - snapped_s <= max_length_sec:
+                c["start_sec"] = snapped_s
+                c["end_sec"] = snapped_e
 
         # AUDIT-P1-05: Product policy prohibits virality/monetization prediction.
         # Primary candidate editorial score is editorial_potential, with graceful fallback to legacy virality_score.
