@@ -43,7 +43,7 @@ def cleanup_project_temp_files(
         for p in project_dir.glob(pattern):
             try:
                 stat = p.stat()
-                if (now - stat.st_mtime) >= max_age_seconds:
+                if max_age_seconds <= 0 or (now - stat.st_mtime) >= max_age_seconds:
                     size = stat.st_size
                     p.unlink(missing_ok=True)
                     deleted_files.append(p.name)
@@ -58,7 +58,7 @@ def cleanup_project_temp_files(
             for p in clips_dir.glob(pattern):
                 try:
                     stat = p.stat()
-                    if (now - stat.st_mtime) >= max_age_seconds:
+                    if max_age_seconds <= 0 or (now - stat.st_mtime) >= max_age_seconds:
                         size = stat.st_size
                         p.unlink(missing_ok=True)
                         deleted_files.append(f"clips/{p.name}")

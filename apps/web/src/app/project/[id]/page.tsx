@@ -473,6 +473,9 @@ export default function ProjectDetailPage() {
 
   const isActive = !["done", "failed"].includes(project.status);
   const stageOrder = ["download", "transcribe", "select", "crop", "caption"];
+  // Worker died mid-run: still "active" but no stage has reported progress for 15 minutes
+  const lastJobUpdate = Math.max(0, ...project.jobs.map((j) => new Date(j.updated_at || 0).getTime()));
+  const isStalled = isActive && lastJobUpdate > 0 && Date.now() - lastJobUpdate > 15 * 60 * 1000;
 
   return (
     <div className="flex-1 flex flex-col min-h-screen">
@@ -486,11 +489,9 @@ export default function ProjectDetailPage() {
           </Link>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-bold tracking-tight truncate">
-              {project.source_value.length > 50
-                ? project.source_value.slice(0, 50) + "..."
-                : project.source_value}
+              {project.title || project.source_value}
             </h1>
-            <p className="text-xs text-cf-muted">
+            <p className="text-xs text-cf-muted truncate" title={project.source_value}>
               Created {new Date(project.created_at).toLocaleDateString()}
             </p>
           </div>
@@ -548,7 +549,7 @@ export default function ProjectDetailPage() {
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
           </button>
 
-          {project.status === "failed" && (
+          {(project.status === "failed" || isStalled) && (
             <button
               onClick={handleRetry}
               disabled={retrying}
@@ -630,7 +631,7 @@ export default function ProjectDetailPage() {
                   <input
                     type="number"
                     min={1}
-                    max={20}
+                    max={50}
                     value={reclipSettings.clip_count}
                     onChange={(e) => setReclipSettings({ ...reclipSettings, clip_count: parseInt(e.target.value) || 5 })}
                     className="w-full rounded-lg bg-background border border-border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
@@ -665,9 +666,8 @@ export default function ProjectDetailPage() {
                     onChange={(e) => setReclipSettings({ ...reclipSettings, aspect_ratio: e.target.value })}
                     className="w-full rounded-lg bg-background border border-border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                   >
+                    {/* Renderer only outputs 9:16; other ratios were selectable but ignored */}
                     <option value="9:16">9:16 (Shorts/Reels)</option>
-                    <option value="1:1">1:1 (Square)</option>
-                    <option value="16:9">16:9 (Landscape)</option>
                   </select>
                 </div>
               </div>

@@ -159,9 +159,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">
-                          {project.source_value.length > 60
-                            ? project.source_value.slice(0, 60) + "..."
-                            : project.source_value}
+                          {project.title || project.source_value}
                         </p>
                         <p className="text-xs text-cf-muted mt-0.5">
                           {project.clip_count} clips · {timeAgo(project.created_at)}

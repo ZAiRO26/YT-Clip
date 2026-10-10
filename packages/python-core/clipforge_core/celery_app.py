@@ -10,16 +10,69 @@ Named queue architecture per context2-upgrade.md Section 3.4:
   - qa:         technical QC, aspect/loudness validation, manifest output (concurrency=3)
   - default:    unrouted fallback tasks
 """
-from celery import Celery
+import logging
+import uuid
+from datetime import datetime, timezone
+
+from celery import Celery, Task
 from kombu import Exchange, Queue
 
 from clipforge_core.config import settings
+
+logger = logging.getLogger(__name__)
+
+_STAGE_ORDER = ["download", "transcribe", "select", "crop", "caption"]
+
+
+class PipelineTask(Task):
+    """
+    Safety net: if a pipeline task dies with an unhandled error, mark the project
+    and its active stage as failed so the UI shows the reason and offers Retry,
+    instead of leaving the project "running" forever.
+    """
+
+    def on_failure(self, exc, task_id, args, kwargs, einfo):
+        project_id = kwargs.get("project_id") or (args[0] if args else None)
+        if not project_id:
+            return
+        from clipforge_core.database import get_sync_session
+        from clipforge_core.models import Job, Project
+
+        session = get_sync_session()
+        try:
+            pid = uuid.UUID(str(project_id))
+            project = session.query(Project).filter(Project.id == pid).first()
+            if not project or project.status in ("done", "failed"):
+                return
+            jobs = session.query(Job).filter(Job.project_id == pid).all()
+            active = [j for j in jobs if j.status in ("running", "retrying")]
+            if not active:
+                pending = sorted(
+                    (j for j in jobs if j.status == "pending" and j.stage in _STAGE_ORDER),
+                    key=lambda j: _STAGE_ORDER.index(j.stage),
+                )
+                active = pending[:1]
+            now = datetime.now(timezone.utc)
+            for job in active:
+                job.status = "failed"
+                job.error_message = f"{type(exc).__name__}: {exc}"[:500]
+                job.completed_at = now
+                job.updated_at = now
+            project.status = "failed"
+            session.commit()
+            logger.error(f"[Pipeline] Task {self.name} failed for project {project_id}: {exc}")
+        except Exception as e:
+            session.rollback()
+            logger.error(f"[Pipeline] Could not record failure for project {project_id}: {e}")
+        finally:
+            session.close()
 
 # Create the Celery application
 celery_app = Celery(
     "clipforge",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
+    task_cls=PipelineTask,
 )
 
 # Define standard direct exchange
@@ -68,8 +121,12 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     task_track_started=True,
-    task_time_limit=1800,
-    task_soft_time_limit=1500,
+    # Full-length videos analyse for hours; limits must sit well above that
+    task_time_limit=8 * 3600,
+    task_soft_time_limit=7 * 3600,
+    # With acks_late, Redis re-delivers any task still unacknowledged after this long.
+    # The 1h default would re-queue a long analysis while it is still running.
+    broker_transport_options={"visibility_timeout": 12 * 3600},
 
     # Result settings
     result_expires=86400,

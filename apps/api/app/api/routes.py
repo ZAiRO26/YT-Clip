@@ -18,7 +18,7 @@ import logging
 import re
 import shutil
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -78,6 +78,9 @@ def resolve_media_file_path(url_or_path: str | None) -> Optional[Path]:
         return repo_p
 
     return candidate
+
+# A running project with no job progress for this long is treated as stalled (worker died)
+STALE_RUN_MINUTES = 15
 
 # Temporary: hardcoded user for v1 (single-user mode)
 # Will be replaced with Supabase Auth in Phase 4
@@ -257,6 +260,7 @@ async def create_project(
         time_range_end=data.time_range_end,
         temporal_distribution=data.temporal_distribution,
         content_focus=data.content_focus,
+        custom_prompt=data.custom_prompt,
         status="queued",
     )
     session.add(project)
@@ -292,7 +296,7 @@ async def create_project(
 
     # Dispatch pipeline (Celery tasks)
     try:
-        dispatch_pipeline(project_id, project, custom_prompt=data.custom_prompt)
+        dispatch_pipeline(project_id, project)
     except Exception as e:
         logger.error(f"Failed to dispatch pipeline: {e}")
         # Don't fail the request — the project is created, pipeline can be retried
@@ -344,8 +348,17 @@ async def retry_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    if project.status not in ["failed", "queued", "downloading"]:
-        raise HTTPException(status_code=400, detail="Only failed or stuck projects can be retried")
+    if project.status == "done":
+        raise HTTPException(status_code=400, detail="Project already finished; use Generate More to add clips")
+    if project.status != "failed":
+        # Queued or mid-pipeline: restarting a live run would execute the pipeline twice,
+        # so only allow it once nothing has reported progress for a while
+        last_update = max((j.updated_at for j in project.jobs if j.updated_at), default=None)
+        if last_update and datetime.now(timezone.utc) - last_update < timedelta(minutes=STALE_RUN_MINUTES):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Project is still processing. Retry becomes available after {STALE_RUN_MINUTES} minutes without progress.",
+            )
 
     # Reset project status
     project.status = "queued"
@@ -639,6 +652,9 @@ async def export_project_clips(
     if not approved_clips:
         raise HTTPException(status_code=400, detail="No approved clips to export")
 
+    if not data.acknowledged_risks:
+        raise HTTPException(status_code=400, detail="Rights acknowledgement is required before export")
+
     # Determine base export path (fallback to settings table if not provided)
     base_export_str = data.export_path.strip() if data.export_path else ""
     if not base_export_str:
@@ -768,6 +784,10 @@ async def reclip_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    # A second select/render run would overwrite the selections the first one is still rendering
+    if project.status not in ("done", "failed"):
+        raise HTTPException(status_code=400, detail="Project is still processing. Wait for it to finish before generating more clips.")
+
     # Verify transcript exists on disk
     transcript_path = Path(app_settings.MEDIA_DIR) / project_id / "transcript.json"
     if not transcript_path.exists():
@@ -805,6 +825,8 @@ async def reclip_project(
         project.time_range_start = data.time_range_start
     if data.time_range_end is not None:
         project.time_range_end = data.time_range_end
+    if data.custom_prompt:
+        project.custom_prompt = data.custom_prompt
     await session.commit()
 
     # Dispatch the reclip task
@@ -1276,7 +1298,7 @@ async def retry_project_stage(
                 clip_count=project.clip_count or 5,
                 min_length_sec=project.min_length_sec or 20,
                 max_length_sec=project.max_length_sec or 60,
-                custom_prompt=None,
+                custom_prompt=project.custom_prompt,
                 time_range_start=project.time_range_start,
                 time_range_end=project.time_range_end,
                 temporal_distribution=getattr(project, "temporal_distribution", "even_spread") or "even_spread",

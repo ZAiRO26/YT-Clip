@@ -98,7 +98,7 @@ Segments to translate:
             clean_w = sanitize_word(w)
             w_dur = (len(clean_w) / total_chars) * dur
             seg_words.append({
-                "word": clean_w.upper(),
+                "word": clean_w,
                 "start": round(curr_t, 3),
                 "end": round(curr_t + w_dur, 3),
             })
@@ -146,7 +146,7 @@ def translate_segments_to_english(
             words = []
             for w in s.get("words", []):
                 words.append({
-                    "word": sanitize_word(w.get("word", "")).upper(),
+                    "word": sanitize_word(w.get("word", "")),
                     "start": w.get("start", 0.0),
                     "end": w.get("end", 0.0),
                 })

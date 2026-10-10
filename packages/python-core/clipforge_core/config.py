@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     WHISPER_MODEL_SIZE: str = "base"
     WHISPER_DEVICE: str = "cpu"
     WHISPER_COMPUTE_TYPE: str = "int8"
+    # Audio chunks transcribed together. 1 = one at a time (slower, original behaviour).
+    WHISPER_BATCH_SIZE: int = 8
 
     # --- Clip Defaults ---
     DEFAULT_CLIP_COUNT: int = 5

@@ -3,6 +3,7 @@ ClipForge AI — Audio Studio & Sidechain Ducking Mixer (v2)
 Mixes source video audio, original voiceover narration, and ambient background music
 with sidechain compression ducking and loudnorm mastering (-14.0 LUFS).
 """
+import json
 import logging
 import subprocess
 from pathlib import Path
@@ -92,7 +93,7 @@ def mix_audio_tracks(
         # 2 streams: Source and Music
         filter_complex_parts.append(
             f"[{music_idx}:a]volume={music_volume_db}dB[bg_low];"
-            f"[0:a][bg_low]amix=inputs=2:duration=first:dropout_transition=2,"
+            f"[0:a][bg_low]amix=inputs=2:duration=first:dropout_transition=2:normalize=0,"
             f"loudnorm=I=-14:LRA=7:TP=-1.5[aout]"
         )
     else:
@@ -101,21 +102,32 @@ def mix_audio_tracks(
 
     filter_str = "".join(filter_complex_parts)
 
-    cmd = [
-        "ffmpeg",
-        "-y",
-        *inputs,
-        "-filter_complex", filter_str,
-        "-map", "[aout]",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-ar", "44100",
-        "-t", str(duration),
-        str(out_audio),
-    ]
+    def build_cmd(graph: str, output_args: list[str]) -> list[str]:
+        return ["ffmpeg", "-y", *inputs, "-filter_complex", graph, "-map", "[aout]", "-t", str(duration), *output_args]
 
     logger.info(f"[AudioMixer] Mixing audio tracks (VO={'yes' if vo_idx else 'no'}, Music={'yes' if music_idx else 'no'})")
-    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60, check=True)
+
+    # Two-pass loudnorm: single-pass (dynamic) mode lands 1.5-2.5 LU under target on short
+    # mixed clips. Measure first, then apply a linear gain to hit -14 LUFS. Falls back to
+    # single-pass if the measurement cannot be read.
+    master = "loudnorm=I=-14:LRA=7:TP=-1.5"
+    try:
+        probe = subprocess.run(
+            build_cmd(filter_str.replace(f"{master}[aout]", f"{master}:print_format=json[aout]"), ["-f", "null", "-"]),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120, check=True,
+        )
+        stats = json.loads(probe.stderr[probe.stderr.rindex("{"): probe.stderr.rindex("}") + 1])
+        measured = (
+            f"{master}:measured_I={stats['input_i']}:measured_LRA={stats['input_lra']}"
+            f":measured_TP={stats['input_tp']}:measured_thresh={stats['input_thresh']}"
+            f":offset={stats['target_offset']}:linear=true"
+        )
+        filter_str = filter_str.replace(f"{master}[aout]", f"{measured}[aout]")
+    except Exception as e:
+        logger.warning(f"[AudioMixer] Loudness measurement failed, using single-pass normalisation: {e}")
+
+    cmd = build_cmd(filter_str, ["-c:a", "aac", "-b:a", "192k", "-ar", "44100", str(out_audio)])
+    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120, check=True)
 
     return {
         "output_path": str(out_audio),

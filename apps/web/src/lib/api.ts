@@ -238,7 +238,8 @@ class ApiClient {
   async exportProjectClips(id: string, exportPath: string) {
     return this.request<{ message: string; detail?: string }>(`/api/projects/${id}/export`, {
       method: "POST",
-      body: JSON.stringify({ export_path: exportPath }),
+      // Callers only reach this after the user ticks both rights checkboxes in the export modal
+      body: JSON.stringify({ export_path: exportPath, acknowledged_risks: true }),
     });
   }
 

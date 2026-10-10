@@ -84,6 +84,7 @@ class Project(Base):
     time_range_end = Column(Float, nullable=True)
     temporal_distribution = Column(Text, nullable=False, server_default=text("'even_spread'"))
     content_focus = Column(Text, nullable=False, server_default=text("'balanced'"))
+    custom_prompt = Column(Text, nullable=True)
 
     status = Column(Text, nullable=False, server_default=text("'queued'"))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))

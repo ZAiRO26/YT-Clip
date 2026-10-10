@@ -160,6 +160,7 @@ class ProjectResponse(BaseModel):
     time_range_end: float | None = None
     temporal_distribution: str = "even_spread"
     content_focus: str = "balanced"
+    custom_prompt: str | None = None
     status: str
     created_at: datetime
     jobs: list[JobStatus] = []
@@ -217,7 +218,7 @@ class ClipUpdate(BaseModel):
 
 
 class ReclipRequest(BaseModel):
-    clip_count: int = Field(default=5, ge=1, le=20)
+    clip_count: int = Field(default=5, ge=1, le=50)
     min_length_sec: int = Field(default=20, ge=5, le=300)
     max_length_sec: int = Field(default=60, ge=10, le=600)
     aspect_ratio: str = Field(default="9:16", pattern="^(9:16|1:1|16:9)$")

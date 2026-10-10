@@ -309,6 +309,7 @@ def select_clips(
         chunk_duration = (effective_end - effective_start) / num_batches
 
         all_raw_clips: List[Dict[str, Any]] = []
+        batch_errors: List[str] = []
         clips_remaining = clip_count
 
         for batch_idx in range(num_batches):
@@ -370,6 +371,7 @@ def select_clips(
                         break
                 except Exception as e:
                     logger.warning(f"[LLM Select] Batch {batch_idx + 1} attempt {attempt} failed: {e}")
+                    batch_errors.append(str(e))
                 finally:
                     loop.close()
 
@@ -377,6 +379,11 @@ def select_clips(
             all_raw_clips.extend(batch_raw)
 
         raw_clips = all_raw_clips
+        if not raw_clips and batch_errors:
+            # Every batch errored: failing loudly beats silently shipping filler clips
+            raise LLMClientError(
+                message=f"AI selection failed for every batch — is the LLM gateway running? Last error: {batch_errors[-1]}"
+            )
         logger.info(f"[LLM Select] Batched selection complete: {len(raw_clips)} total clips from {num_batches} batches")
 
     else:

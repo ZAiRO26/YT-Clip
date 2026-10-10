@@ -14,13 +14,14 @@ Output: {MEDIA_DIR}/{project_id}/transcript.json
 Celery queue: transcribe (concurrency=2 in production, CPU-bound)
 """
 
+import itertools
 import json
 import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from faster_whisper import WhisperModel
+from faster_whisper import BatchedInferencePipeline, WhisperModel
 
 from clipforge_core.celery_app import celery_app
 from clipforge_core.config import settings
@@ -58,6 +59,54 @@ def _get_whisper_model() -> WhisperModel:
         )
         logger.info("Whisper model loaded successfully")
     return _whisper_model
+
+
+def _split_into_phrases(
+    words: list[dict],
+    pause_sec: float = 0.4,
+    max_phrase_sec: float = 5.0,
+) -> list[list[dict]]:
+    """
+    Split one long run of words into short phrases.
+
+    Batched transcription returns ~30s segments, but clip boundaries, the selection
+    prompt and captions all rely on short ones. Break after a sentence end, at a
+    speech pause, or once a phrase has run max_phrase_sec.
+    """
+    phrases: list[list[dict]] = []
+    for word in words:
+        cur = phrases[-1] if phrases else None
+        if (
+            cur
+            and word["start"] - cur[-1]["end"] < pause_sec
+            and not cur[-1]["word"].rstrip("\"')").endswith((".", "?", "!", "\u0964"))
+            and word["end"] - cur[0]["start"] <= max_phrase_sec
+        ):
+            cur.append(word)
+        else:
+            phrases.append([word])
+    return phrases
+
+
+def _start_transcription(model: WhisperModel, source: str, **kwargs):
+    """
+    Returns (segments_iterator, info, batched). Tries batched inference first and
+    falls back to one-chunk-at-a-time if it cannot start.
+    """
+    batch_size = settings.WHISPER_BATCH_SIZE
+    if batch_size > 1:
+        try:
+            segments_iter, info = BatchedInferencePipeline(model=model).transcribe(
+                source, batch_size=batch_size, **kwargs
+            )
+            # Pull the first segment now so a failing batched run is caught here, not mid-loop
+            first = next(segments_iter, None)
+            head = [first] if first is not None else []
+            return itertools.chain(head, segments_iter), info, True
+        except Exception as e:
+            logger.warning(f"Batched transcription unavailable, using sequential mode: {e}")
+    segments_iter, info = model.transcribe(source, **kwargs)
+    return segments_iter, info, False
 
 
 def _update_job_status(
@@ -143,7 +192,8 @@ def transcribe_audio(source_path: str, output_dir: str, project_id: str | None =
         "Hindi and English dialogue in clean Latin script (Hinglish), e.g. "
         "Haan, ladka, jail, bail, stand-up comedy show, Samay, Ayushmann, YouTube, podcast."
     )
-    segments_iter, info = model.transcribe(
+    segments_iter, info, batched = _start_transcription(
+        model,
         str(source),
         beam_size=5,
         word_timestamps=True,
@@ -186,15 +236,26 @@ def transcribe_audio(source_path: str, output_dir: str, project_id: str | None =
                     }
                 )
 
-        seg_data = {
-            "id": len(segments),
-            "start": round(segment.start, 3),
-            "end": round(segment.end, 3),
-            "text": segment.text.strip(),
-            "words": words,
-        }
-        segments.append(seg_data)
-        full_text_parts.append(segment.text.strip())
+        if batched and words:
+            for phrase in _split_into_phrases(words):
+                text = " ".join(w["word"] for w in phrase)
+                segments.append({
+                    "id": len(segments),
+                    "start": phrase[0]["start"],
+                    "end": phrase[-1]["end"],
+                    "text": text,
+                    "words": phrase,
+                })
+                full_text_parts.append(text)
+        else:
+            segments.append({
+                "id": len(segments),
+                "start": round(segment.start, 3),
+                "end": round(segment.end, 3),
+                "text": segment.text.strip(),
+                "words": words,
+            })
+            full_text_parts.append(segment.text.strip())
 
         # Update progress continuously (smoothly throttled by progress.py to prevent DB spam)
         if project_id and info.duration > 0:
